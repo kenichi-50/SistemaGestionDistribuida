@@ -212,7 +212,7 @@ class DashboardOperacion(QMainWindow):
             ('📦', 'Ver Productos', 'Ver y administrar información\nproducto.', self.abrir_productos, True),
             ('👨‍💼', 'Gestionar Empleados', 'Gestionar Gestionar\nde Laopenceos.', self.abrir_empleados, True),
             ('🛒', 'Gestionar Ventas', 'Consultar y gestionar\nlas ventas y detalles.', self.abrir_ventas, True),
-            ('📋', 'Gestionar Empleados', 'Gestionar Inventario\nde Loja.', self.abrir_detalle_venta, True),
+            ('📋', 'Gestionar Inventario', 'Gestionar Inventario\nde Loja.', self.abrir_detalle_venta, True),
         ]
         
         row, col = 0, 0
