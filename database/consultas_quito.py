@@ -156,169 +156,185 @@ def eliminar_tienda_quito(id_tienda):
 # ============================================================
 
 def obtener_productos_quito():
-    """
-    Obtiene todos los productos del sistema.
-    
-    Returns:
-        list: Lista de diccionarios con datos de productos
-    """
     conexion = conectar_quito()
     if not conexion:
         return []
-    
+
     try:
         cursor = conexion.cursor()
-        query = """
+        cursor.execute("""
             SELECT 
-                p.id_producto,
-                p.nombre,
-                p.marca,
-                p.modelo,
-                p.categoria,
-                p.precio_cents,
-                p.stock_minimo
-            FROM dbo.Producto_Info p
-            ORDER BY p.nombre
-        """
-        cursor.execute(query)
-        resultados = cursor.fetchall()
-        
+                id_producto,
+                nombre,
+                marca,
+                modelo,
+                categoria,
+                precio_cents,
+                stock_minimo,
+                costo_logistico,
+                margen_ganancia,
+                clasificacion_planeacion
+            FROM dbo.Vista_Detalle_Producto
+            ORDER BY id_producto
+        """)
+
         productos = []
-        for row in resultados:
+
+        for f in cursor.fetchall():
             productos.append({
-                'id': row[0],
-                'nombre': row[1],
-                'marca': row[2] if row[2] else '',
-                'modelo': row[3] if row[3] else '',
-                'categoria': row[4] if row[4] else '',
-                'precio': row[5] / 100.0 if row[5] else 0.0,
-                'stock_minimo': row[6] if row[6] else 0
+                'id': f[0],
+                'nombre': f[1],
+                'marca': f[2] or '',
+                'modelo': f[3] or '',
+                'categoria': f[4] or '',
+                'precio': f[5] / 100,
+                'stock_minimo': f[6],
+                'costo_logistico': f[7],
+                'margen_porcentaje': f[8],
+                'clasificacion_planeacion': f[9]
             })
-        
+
         cursor.close()
         cerrar_conexion(conexion)
         return productos
-        
-    except pyodbc.Error as e:
-        print(f"✗ Error al obtener productos: {e}")
+
+    except Exception as e:
+        print("✗ Error al obtener productos (Quito):", e)
         cerrar_conexion(conexion)
         return []
 
 
-def insertar_producto_quito(nombre, marca, modelo, categoria, precio, stock_minimo):
-    """
-    Inserta un nuevo producto en el sistema.
-    
-    Args:
-        nombre (str): Nombre del producto
-        marca (str): Marca
-        modelo (str): Modelo
-        categoria (str): Categoría
-        precio (float): Precio en dólares
-        stock_minimo (int): Stock mínimo
-        
-    Returns:
-        bool: True si se insertó correctamente
-    """
+
+def insertar_producto_quito(
+    nombre, marca, modelo, categoria,
+    precio, stock_minimo,
+    costo_logistico, margen_ganancia, clasificacion
+):
     conexion = conectar_quito()
     if not conexion:
         return False
-    
+
     try:
         cursor = conexion.cursor()
-        precio_cents = int(precio * 100)  # Convertir a centavos
-        
-        query = """
-            INSERT INTO dbo.Producto_Info (nombre, marca, modelo, categoria, precio_cents, stock_minimo)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """
-        cursor.execute(query, (nombre, marca, modelo, categoria, precio_cents, stock_minimo))
+
+        # 1️⃣ Obtener ID desde SEQUENCE
+        cursor.execute("SELECT NEXT VALUE FOR dbo.seq_producto")
+        id_producto = cursor.fetchone()[0]
+
+        precio_cents = int(precio * 100)
+
+        # 2️⃣ Insertar Producto_Info
+        cursor.execute("""
+            INSERT INTO Producto_Info (
+                id_producto, nombre, marca, modelo,
+                categoria, precio_cents, stock_minimo
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            id_producto, nombre, marca, modelo,
+            categoria, precio_cents, stock_minimo
+        ))
+
+        # 3️⃣ Insertar Producto_Contenido
+        cursor.execute("""
+            INSERT INTO Producto_Contenido (
+                id_producto, costo_logistico,
+                margen_ganancia, clasificacion_planeacion
+            )
+            VALUES (?, ?, ?, ?)
+        """, (
+            id_producto, costo_logistico,
+            margen_ganancia, clasificacion
+        ))
+
         conexion.commit()
-        
-        print(f"✓ Producto '{nombre}' insertado correctamente")
-        cursor.close()
-        cerrar_conexion(conexion)
         return True
-        
-    except pyodbc.Error as e:
-        print(f"✗ Error al insertar producto: {e}")
+
+    except Exception as e:
+        print("Error producto:", e)
         conexion.rollback()
-        cerrar_conexion(conexion)
         return False
 
 
-def actualizar_producto_quito(id_producto, nombre, marca, modelo, categoria, precio, stock_minimo):
-    """
-    Actualiza un producto existente.
-    
-    Args:
-        id_producto (int): ID del producto
-        nombre (str): Nombre
-        marca (str): Marca
-        modelo (str): Modelo
-        categoria (str): Categoría
-        precio (float): Precio en dólares
-        stock_minimo (int): Stock mínimo
-        
-    Returns:
-        bool: True si se actualizó correctamente
-    """
+def actualizar_producto_quito(
+    id_producto, nombre, marca, modelo, categoria,
+    precio, stock_minimo,
+    costo_logistico, margen_ganancia, clasificacion
+):
     conexion = conectar_quito()
     if not conexion:
         return False
-    
+
     try:
         cursor = conexion.cursor()
         precio_cents = int(precio * 100)
-        
-        query = """
+
+        # 1️⃣ Producto_Info
+        cursor.execute("""
             UPDATE dbo.Producto_Info
-            SET nombre = ?, marca = ?, modelo = ?, categoria = ?, 
+            SET nombre = ?, marca = ?, modelo = ?, categoria = ?,
                 precio_cents = ?, stock_minimo = ?
             WHERE id_producto = ?
-        """
-        cursor.execute(query, (nombre, marca, modelo, categoria, precio_cents, stock_minimo, id_producto))
+        """, (
+            nombre, marca, modelo, categoria,
+            precio_cents, stock_minimo, id_producto
+        ))
+
+        # 2️⃣ Producto_Contenido
+        cursor.execute("""
+            UPDATE dbo.Producto_Contenido
+            SET costo_logistico = ?,
+                margen_ganancia = ?,
+                clasificacion_planeacion = ?
+            WHERE id_producto = ?
+        """, (
+            costo_logistico, margen_ganancia,
+            clasificacion, id_producto
+        ))
+
         conexion.commit()
-        
         print(f"✓ Producto ID {id_producto} actualizado correctamente")
+
         cursor.close()
         cerrar_conexion(conexion)
         return True
-        
-    except pyodbc.Error as e:
-        print(f"✗ Error al actualizar producto: {e}")
+
+    except Exception as e:
+        print("✗ Error al actualizar producto:", e)
         conexion.rollback()
         cerrar_conexion(conexion)
         return False
 
 
 def eliminar_producto_quito(id_producto):
-    """
-    Elimina un producto del sistema.
-    
-    Args:
-        id_producto (int): ID del producto
-        
-    Returns:
-        bool: True si se eliminó correctamente
-    """
     conexion = conectar_quito()
     if not conexion:
         return False
-    
+
     try:
         cursor = conexion.cursor()
-        query = "DELETE FROM dbo.Producto_Info WHERE id_producto = ?"
-        cursor.execute(query, (id_producto,))
+
+        # 1️⃣ Borrar Producto_Contenido
+        cursor.execute("""
+            DELETE FROM dbo.Producto_Contenido
+            WHERE id_producto = ?
+        """, (id_producto,))
+
+        # 2️⃣ Borrar Producto_Info
+        cursor.execute("""
+            DELETE FROM dbo.Producto_Info
+            WHERE id_producto = ?
+        """, (id_producto,))
+
         conexion.commit()
-        
         print(f"✓ Producto ID {id_producto} eliminado correctamente")
+
         cursor.close()
         cerrar_conexion(conexion)
         return True
-        
-    except pyodbc.Error as e:
-        print(f"✗ Error al eliminar producto: {e}")
+
+    except Exception as e:
+        print("✗ Error al eliminar producto:", e)
         conexion.rollback()
         cerrar_conexion(conexion)
         return False
@@ -399,7 +415,7 @@ def insertar_cliente_quito(nombre, direccion, telefono, correo):
         cursor = conexion.cursor()
         query = """
             INSERT INTO dbo.Cliente (nombre, direccion, telefono, correo)
-            VALUES (?, ?, ?, ?)
+            VALUES ( ? , ?, ? , ? );
         """
         cursor.execute(query, (nombre, direccion, telefono, correo))
         conexion.commit()
@@ -497,8 +513,7 @@ def obtener_empleados_quito():
                 e.cargo,
                 e.fechaContratacion,
                 e.fkIdTienda
-            FROM dbo.Empleado_Quito e
-            WHERE e.fkIdTienda IN (1, 2)
+            FROM dbo.Vista_Empleados_Global e
             ORDER BY e.nombre
         """
         cursor.execute(query)

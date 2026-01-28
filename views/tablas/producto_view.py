@@ -216,9 +216,20 @@ class ProductoView(QWidget):
         # ==================== TABLA ====================
         self.tabla = QTableWidget()
         self.tabla.verticalHeader().setVisible(False)
-        self.tabla.setColumnCount(7)
-        self.tabla.setHorizontalHeaderLabels(['ID', 'Nombre', 'Marca', 'Modelo', 'Categoría', 'Precio', 'Stock Mín'])
-        
+        if self.nodo == 'gestion':
+            self.tabla.setColumnCount(10)
+            self.tabla.setHorizontalHeaderLabels([
+                'ID', 'Nombre', 'Marca', 'Modelo', 'Categoría',
+                'Precio', 'Stock Mín',
+                'Costo Logístico', 'Margen %', 'Clasificación'
+            ])
+        else:
+            self.tabla.setColumnCount(7)
+            self.tabla.setHorizontalHeaderLabels([
+                'ID', 'Nombre', 'Marca', 'Modelo',
+                'Categoría', 'Precio', 'Stock Mín'
+            ])
+
         self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
         self.tabla.setSelectionMode(QTableWidget.SingleSelection)
         self.tabla.setAlternatingRowColors(True)
@@ -233,7 +244,11 @@ class ProductoView(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
-        
+        if self.nodo == 'gestion':
+            header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(8, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(9, QHeaderView.ResizeToContents)
+
         self.tabla.setStyleSheet("""
             QTableWidget {
                 background-color: white;
@@ -313,7 +328,10 @@ class ProductoView(QWidget):
             self.tabla.setItem(row, 4, QTableWidgetItem(producto['categoria']))
             self.tabla.setItem(row, 5, QTableWidgetItem(f"${producto['precio']:.2f}"))
             self.tabla.setItem(row, 6, QTableWidgetItem(str(producto['stock_minimo'])))
-        
+            if self.nodo == 'gestion':
+                self.tabla.setItem(row, 7, QTableWidgetItem(f"${producto['costo_logistico']:.2f}"))
+                self.tabla.setItem(row, 8, QTableWidgetItem(f"{producto['margen_porcentaje']:.2f} %"))
+                self.tabla.setItem(row, 9, QTableWidgetItem(producto['clasificacion_planeacion']))
         self.info_label.setText(f"Mostrando {len(datos)} registros")
         
     def filtrar_datos(self):

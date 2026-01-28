@@ -267,7 +267,7 @@ def obtener_empleados_loja():
                 e.cargo,
                 e.fechaContratacion,
                 e.fkIdTienda
-            FROM dbo.Empleado_Loja e
+            FROM dbo.Vista_Empleados_Global e
             ORDER BY e.nombre
         """
         cursor.execute(query)
