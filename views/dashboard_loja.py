@@ -1,318 +1,568 @@
 """
-views/dashboard_operacion.py
-=============================
-Dashboard principal del Nodo de Operación (Loja).
-Interfaz similar al dashboard de gestión pero sin módulo Tienda.
+views/dashboard_loja.py
+=======================
+Dashboard del Nodo de Operación (Loja).
+
+Módulos disponibles:
+- Cliente (CRUD completo)
+- Producto (SOLO LECTURA)
+- Empleado (solo empleados de Loja)
+- Venta (solo ventas de Loja)
+- Detalle Venta (consulta)
+- Inventario (solo inventario de Loja)
+
+IMPORTANTE: NO tiene acceso al módulo Tienda
 
 Autor: Sistema BDD Distribuida
 Fecha: Enero 2026
 """
 
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QLabel, QPushButton, QFrame, QScrollArea, QGridLayout)
+                             QPushButton, QLabel, QFrame, QScrollArea, QGridLayout)
 from PyQt5.QtCore import Qt
-from views.tablas.producto_view import ProductoView
-from views.tablas.cliente_view import ClienteView
+from PyQt5.QtGui import QFont
 
 
-class DashboardOperacion(QMainWindow):
+class DashboardLoja(QMainWindow):
     """
-    Dashboard principal para el Nodo de Operación (Loja).
-    
-    ⚠️ SIN acceso al módulo Tienda
-    Producto en modo SOLO LECTURA
+    Dashboard principal del Nodo de Operación (Loja).
     """
     
     def __init__(self, datos_usuario):
         super().__init__()
         self.datos_usuario = datos_usuario
-        self.ventana_activa = None
-        self.inicializar_ui()
+        self.modulo_actual = None
+        self.init_ui()
         
-    def inicializar_ui(self):
-        """Configura la interfaz del dashboard."""
+    def init_ui(self):
+        """
+        Inicializa la interfaz de usuario.
+        """
+        # Configuración de la ventana
         self.setWindowTitle("Sistema de Gestión Distribuida")
         self.setMinimumSize(1200, 700)
         self.showMaximized()
         
-        widget_central = QWidget()
-        self.setCentralWidget(widget_central)
+        # Widget central
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
         
-        layout_principal = QHBoxLayout()
-        layout_principal.setContentsMargins(0, 0, 0, 0)
-        layout_principal.setSpacing(0)
-        widget_central.setLayout(layout_principal)
+        # Layout principal (horizontal: sidebar + contenido)
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        central_widget.setLayout(main_layout)
         
-        self.crear_sidebar(layout_principal)
-        self.crear_area_contenido(layout_principal)
+        # ==================== SIDEBAR ====================
+        self.create_sidebar(main_layout)
         
-    def crear_sidebar(self, layout_padre):
-        """Crea el sidebar SIN módulo Tienda."""
+        # ==================== CONTENIDO PRINCIPAL ====================
+        self.create_main_content(main_layout)
+        
+    def create_sidebar(self, parent_layout):
+        """
+        Crea el sidebar lateral con los módulos.
+        NOTA: NO incluye Tienda (solo disponible en Gestión)
+        
+        Args:
+            parent_layout: Layout padre donde se añadirá el sidebar
+        """
+        # Frame del sidebar
         sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(220)
-        sidebar.setStyleSheet("QFrame { background-color: #34495e; border: none; }")
+        sidebar.setStyleSheet("""
+            QFrame#sidebar {
+                background-color: #3d4d66;
+                border: none;
+            }
+        """)
         
-        layout_sidebar = QVBoxLayout()
-        layout_sidebar.setContentsMargins(0, 0, 0, 0)
-        layout_sidebar.setSpacing(0)
-        sidebar.setLayout(layout_sidebar)
+        # Layout del sidebar
+        sidebar_layout = QVBoxLayout()
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(0)
+        sidebar.setLayout(sidebar_layout)
         
-        # Header
-        header_sidebar = QFrame()
-        header_sidebar.setStyleSheet("background-color: #2c3e50;")
-        header_sidebar.setFixedHeight(70)
+        # Título del sidebar
+        sidebar_title = QLabel("Nodo de Operación")
+        sidebar_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        sidebar_title.setStyleSheet("""
+            color: white;
+            padding: 25px 20px;
+            background-color: #2c3a4f;
+        """)
+        sidebar_layout.addWidget(sidebar_title)
         
-        layout_header = QVBoxLayout()
-        layout_header.setContentsMargins(20, 15, 20, 15)
-        header_sidebar.setLayout(layout_header)
-        
-        label_nodo = QLabel("Nodo de Operación")
-        label_nodo.setStyleSheet("color: white; font-size: 18px; font-weight: bold;")
-        
-        layout_header.addWidget(label_nodo)
-        layout_sidebar.addWidget(header_sidebar)
-        
-        # ⚠️ IMPORTANTE: SIN módulo Tienda
+        # Módulos disponibles (SIN Tienda)
         modulos = [
-            ('👥', 'Cliente', self.abrir_clientes),
-            ('📦', 'Producto', self.abrir_productos),  # Solo lectura
-            ('👨‍💼', 'Empleado', self.abrir_empleados),
-            ('🛒', 'Venta', self.abrir_ventas),
-            ('📋', 'Detalle Venta', self.abrir_detalle_venta),
-            ('📊', 'Inventario', self.abrir_inventario),
+            {"nombre": "Cliente", "icono": "👤"},
+            {"nombre": "Producto", "icono": "📦"},
+            {"nombre": "Empleado", "icono": "👷"},
+            {"nombre": "Venta", "icono": "🛒"},
+            {"nombre": "Detalle Venta", "icono": "📄"},
+            {"nombre": "Inventario", "icono": "📊"}
         ]
         
-        for icono, nombre, funcion in modulos:
-            btn = self.crear_boton_modulo(icono, nombre, funcion)
-            layout_sidebar.addWidget(btn)
+        # Crear botones para cada módulo
+        self.sidebar_buttons = {}
+        for modulo in modulos:
+            btn = self.create_sidebar_button(modulo["icono"], modulo["nombre"])
+            sidebar_layout.addWidget(btn)
+            self.sidebar_buttons[modulo["nombre"]] = btn
         
-        layout_sidebar.addStretch()
-        layout_padre.addWidget(sidebar)
+        # Stretch al final
+        sidebar_layout.addStretch()
         
-    def crear_boton_modulo(self, icono, nombre, funcion):
-        """Crea botón de módulo en sidebar."""
-        btn = QPushButton(f"  {icono}  {nombre}")
+        parent_layout.addWidget(sidebar)
+        
+    def create_sidebar_button(self, icono, texto):
+        """
+        Crea un botón para el sidebar.
+        
+        Args:
+            icono (str): Emoji del icono
+            texto (str): Texto del botón
+            
+        Returns:
+            QPushButton: Botón configurado
+        """
+        btn = QPushButton(f"  {icono}  {texto}")
+        btn.setObjectName("sidebar_button")
+        btn.setCheckable(True)
+        btn.setFont(QFont("Segoe UI", 11))
+        btn.setCursor(Qt.PointingHandCursor)
         btn.setStyleSheet("""
-            QPushButton {
+            QPushButton#sidebar_button {
                 background-color: transparent;
                 color: white;
                 border: none;
                 text-align: left;
-                padding: 15px 20px;
+                padding: 18px 20px;
                 font-size: 14px;
             }
-            QPushButton:hover { background-color: #2980b9; }
-            QPushButton:pressed { background-color: #1f618d; }
+            QPushButton#sidebar_button:hover {
+                background-color: #4a5d7c;
+            }
+            QPushButton#sidebar_button:checked {
+                background-color: #4a5d7c;
+                border-left: 4px solid #4299e1;
+            }
         """)
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.clicked.connect(funcion)
+        
+        # Conectar evento
+        btn.clicked.connect(lambda: self.on_modulo_clicked(texto))
+        
         return btn
         
-    def crear_area_contenido(self, layout_padre):
-        """Crea el área de contenido."""
-        frame_contenido = QFrame()
-        frame_contenido.setStyleSheet("background-color: #ecf0f1;")
+    def create_main_content(self, parent_layout):
+        """
+        Crea el área de contenido principal.
         
-        layout_contenido = QVBoxLayout()
-        layout_contenido.setContentsMargins(0, 0, 0, 0)
-        layout_contenido.setSpacing(0)
-        frame_contenido.setLayout(layout_contenido)
+        Args:
+            parent_layout: Layout padre
+        """
+        # Widget contenedor
+        content_widget = QWidget()
+        content_widget.setStyleSheet("background-color: #f5f7fa;")
         
-        self.crear_barra_superior(layout_contenido)
-        self.crear_area_bienvenida(layout_contenido)
+        # Layout del contenido
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        content_widget.setLayout(content_layout)
         
-        layout_padre.addWidget(frame_contenido)
+        # ==================== HEADER ====================
+        self.create_header(content_layout)
         
-    def crear_barra_superior(self, layout_padre):
-        """Crea barra superior."""
-        barra = QFrame()
-        barra.setFixedHeight(70)
-        barra.setStyleSheet("background-color: white; border-bottom: 1px solid #dcdde1;")
+        # ==================== ÁREA DE CONTENIDO ====================
+        # Scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: #f5f7fa;
+            }
+        """)
         
-        layout_barra = QHBoxLayout()
-        layout_barra.setContentsMargins(30, 15, 30, 15)
-        barra.setLayout(layout_barra)
+        # Widget del scroll
+        self.scroll_content = QWidget()
+        self.scroll_layout = QVBoxLayout()
+        self.scroll_layout.setContentsMargins(30, 30, 30, 30)
+        self.scroll_layout.setSpacing(20)
+        self.scroll_content.setLayout(self.scroll_layout)
         
-        label_nodo = QLabel("Nodo: Loja")
-        label_nodo.setStyleSheet("font-size: 14px; color: #7f8c8d;")
+        scroll.setWidget(self.scroll_content)
+        content_layout.addWidget(scroll)
         
-        layout_barra.addWidget(label_nodo)
-        layout_barra.addStretch()
+        # Mostrar página de bienvenida por defecto
+        self.show_welcome_page()
         
-        label_usuario = QLabel(f"👤 {self.datos_usuario['usuario']}")
-        label_usuario.setStyleSheet("font-size: 14px; color: #2c3e50; margin-right: 15px;")
+        parent_layout.addWidget(content_widget)
         
-        btn_cerrar = QPushButton("Cerrar Sesión")
-        btn_cerrar.setStyleSheet("""
-            QPushButton {
-                background-color: #34495e;
+    def create_header(self, parent_layout):
+        """
+        Crea el header superior.
+        
+        Args:
+            parent_layout: Layout padre
+        """
+        # Frame del header
+        header = QFrame()
+        header.setObjectName("header")
+        header.setFixedHeight(70)
+        header.setStyleSheet("""
+            QFrame#header {
+                background-color: white;
+                border-bottom: 1px solid #e2e8f0;
+            }
+        """)
+        
+        # Layout del header
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(30, 0, 30, 0)
+        header.setLayout(header_layout)
+        
+        # Info del nodo
+        nodo_label = QLabel(f"Nodo: {self.datos_usuario['ciudad']}")
+        nodo_label.setFont(QFont("Segoe UI", 11))
+        nodo_label.setStyleSheet("color: #718096;")
+        
+        header_layout.addWidget(nodo_label)
+        header_layout.addStretch()
+        
+        # Icono usuario
+        user_icon = QLabel("👤")
+        user_icon.setFont(QFont("Segoe UI", 16))
+        user_icon.setStyleSheet("color: #4a5568;")
+        
+        # Nombre usuario
+        user_label = QLabel(self.datos_usuario['usuario'])
+        user_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        user_label.setStyleSheet("color: #2d3748; margin-left: 5px;")
+        
+        # Botón cerrar sesión
+        logout_btn = QPushButton("Cerrar Sesión")
+        logout_btn.setObjectName("cerrar_sesion")
+        logout_btn.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        logout_btn.setCursor(Qt.PointingHandCursor)
+        logout_btn.setFixedHeight(35)
+        logout_btn.setStyleSheet("""
+            QPushButton#cerrar_sesion {
+                background-color: #3d5a80;
                 color: white;
                 border: none;
                 border-radius: 5px;
-                padding: 10px 20px;
-                font-size: 13px;
-                font-weight: bold;
+                padding: 0 20px;
             }
-            QPushButton:hover { background-color: #2c3e50; }
+            QPushButton#cerrar_sesion:hover {
+                background-color: #2e4660;
+            }
         """)
-        btn_cerrar.setCursor(Qt.PointingHandCursor)
-        btn_cerrar.clicked.connect(self.cerrar_sesion)
+        logout_btn.clicked.connect(self.logout)
         
-        layout_barra.addWidget(label_usuario)
-        layout_barra.addWidget(btn_cerrar)
-        layout_padre.addWidget(barra)
+        header_layout.addWidget(user_icon)
+        header_layout.addWidget(user_label)
+        header_layout.addSpacing(20)
+        header_layout.addWidget(logout_btn)
         
-    def crear_area_bienvenida(self, layout_padre):
-        """Crea área de bienvenida con tarjetas."""
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; }")
+        parent_layout.addWidget(header)
         
-        widget_scroll = QWidget()
-        layout_scroll = QVBoxLayout()
-        layout_scroll.setContentsMargins(40, 30, 40, 30)
-        layout_scroll.setSpacing(20)
-        widget_scroll.setLayout(layout_scroll)
+    def show_welcome_page(self):
+        """
+        Muestra la página de bienvenida con las tarjetas de módulos.
+        """
+        # Limpiar contenido actual
+        self.clear_content()
         
-        label_titulo = QLabel("Nodo de Operación")
-        label_titulo.setStyleSheet("font-size: 28px; font-weight: bold; color: #2c3e50;")
+        # Título de bienvenida
+        welcome_title = QLabel("Nodo de Operación")
+        welcome_title.setFont(QFont("Segoe UI", 28, QFont.Bold))
+        welcome_title.setStyleSheet("color: #2d3748;")
         
-        label_subtitulo = QLabel(f"Bienvenido, {self.datos_usuario['usuario']}.")
-        label_subtitulo.setStyleSheet("font-size: 16px; color: #7f8c8d;")
+        # Mensaje de bienvenida
+        welcome_msg = QLabel(f"Bienvenido, {self.datos_usuario['nombre_completo']}.")
+        welcome_msg.setFont(QFont("Segoe UI", 14))
+        welcome_msg.setStyleSheet("color: #4a5568; margin-top: 5px;")
         
-        label_descripcion = QLabel("Desde aquí puedes consultar y gestionar cierta información del sistema distribuido.")
-        label_descripcion.setStyleSheet("font-size: 13px; color: #95a5a6; margin-bottom: 20px;")
+        # Descripción
+        description = QLabel("Desde aquí puedes consultar y gestionar cierta información del sistema distribuido.")
+        description.setFont(QFont("Segoe UI", 12))
+        description.setStyleSheet("color: #718096; margin-top: 10px; margin-bottom: 30px;")
         
-        layout_scroll.addWidget(label_titulo)
-        layout_scroll.addWidget(label_subtitulo)
-        layout_scroll.addWidget(label_descripcion)
+        self.scroll_layout.addWidget(welcome_title)
+        self.scroll_layout.addWidget(welcome_msg)
+        self.scroll_layout.addWidget(description)
         
-        self.crear_grid_tarjetas(layout_scroll)
+        # Grid de tarjetas
+        self.create_module_cards()
         
-        label_footer = QLabel("© 2026 - Sistema Corporativo")
-        label_footer.setAlignment(Qt.AlignCenter)
-        label_footer.setStyleSheet("font-size: 11px; color: #95a5a6; margin-top: 30px;")
+        self.scroll_layout.addStretch()
         
-        layout_scroll.addStretch()
-        layout_scroll.addWidget(label_footer)
+    def create_module_cards(self):
+        """
+        Crea las tarjetas de los módulos.
+        """
+        # Grid layout
+        grid = QGridLayout()
+        grid.setSpacing(15)
         
-        scroll.setWidget(widget_scroll)
-        layout_padre.addWidget(scroll)
-        
-    def crear_grid_tarjetas(self, layout_padre):
-        """Crea grid de tarjetas - CON tarjeta Producto deshabilitada."""
-        frame_grid = QFrame()
-        grid_layout = QGridLayout()
-        grid_layout.setSpacing(20)
-        frame_grid.setLayout(grid_layout)
-        
-        # Tarjetas (Producto estará deshabilitado visualmente)
-        tarjetas = [
-            ('👥', 'Gestionar Clientes', 'Gestionar tiendas y\nsus ubicaciones.', self.abrir_clientes, True),
-            ('📦', 'Ver Productos', 'Ver y administrar información\nproducto.', self.abrir_productos, True),
-            ('👨‍💼', 'Gestionar Empleados', 'Gestionar Gestionar\nde Laopenceos.', self.abrir_empleados, True),
-            ('🛒', 'Gestionar Ventas', 'Consultar y gestionar\nlas ventas y detalles.', self.abrir_ventas, True),
-            ('📋', 'Gestionar Inventario', 'Gestionar Inventario\nde Loja.', self.abrir_detalle_venta, True),
+        # Definición de módulos (SIN Tienda)
+        modules = [
+            {
+                "nombre": "Cliente",
+                "icono": "👥",
+                "titulo": "Gestionar Clientes",
+                "descripcion": "Gestionar tiendas y\nsus ubicaciones.",
+                "enabled": True
+            },
+            {
+                "nombre": "Producto",
+                "icono": "📦",
+                "titulo": "Ver Productos",
+                "descripcion": "Ver y administrar información\nproducto.",
+                "enabled": True  # Solo lectura
+            },
+            {
+                "nombre": "Empleado",
+                "icono": "👷",
+                "titulo": "Gestionar Empleados",
+                "descripcion": "Gestionar trestionar\nde Laoperaciones.",
+                "enabled": True
+            },
+            {
+                "nombre": "Venta",
+                "icono": "🛒",
+                "titulo": "Gestionar Ventas",
+                "descripcion": "Consultar y gestionar\nlas ventas y detalles.",
+                "enabled": True
+            },
+            {
+                "nombre": "Detalle Venta",
+                "icono": "📄",
+                "titulo": "Ver Detalles de Venta",
+                "descripcion": "Consultar detalles\nde ventas realizadas.",
+                "enabled": True
+            },
+            {
+                "nombre": "Inventario",
+                "icono": "📊",
+                "titulo": "Inventario",
+                "descripcion": "Consultar inventario\nlocal.",
+                "enabled": True
+            }
         ]
         
+        # Crear tarjetas
         row, col = 0, 0
-        for icono, titulo, descripcion, funcion, habilitado in tarjetas:
-            tarjeta = self.crear_tarjeta(icono, titulo, descripcion, funcion, habilitado)
-            grid_layout.addWidget(tarjeta, row, col)
+        for module in modules:
+            card = self.create_card(
+                module["icono"],
+                module["titulo"],
+                module["descripcion"],
+                module["nombre"],
+                module.get("enabled", True)
+            )
+            grid.addWidget(card, row, col)
             
             col += 1
-            if col >= 3:
+            if col > 2:  # 3 columnas
                 col = 0
                 row += 1
         
-        layout_padre.addWidget(frame_grid)
+        self.scroll_layout.addLayout(grid)
         
-    def crear_tarjeta(self, icono, titulo, descripcion, funcion, habilitado=True):
-        """Crea tarjeta de módulo."""
-        tarjeta = QFrame()
-        tarjeta.setFixedSize(280, 180)
+    def create_card(self, icono, titulo, descripcion, modulo, enabled=True):
+        """
+        Crea una tarjeta de módulo.
         
-        if habilitado:
-            tarjeta.setStyleSheet("""
+        Args:
+            icono (str): Emoji del icono
+            titulo (str): Título de la tarjeta
+            descripcion (str): Descripción
+            modulo (str): Nombre del módulo
+            enabled (bool): Si está habilitado para edición
+            
+        Returns:
+            QFrame: Tarjeta configurada
+        """
+        # Frame de la tarjeta
+        card = QFrame()
+        card.setFixedSize(280, 180)
+        
+        if enabled:
+            card.setCursor(Qt.PointingHandCursor)
+            card.setStyleSheet("""
                 QFrame {
                     background-color: white;
-                    border-radius: 10px;
-                    border: 1px solid #dcdde1;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
                 }
                 QFrame:hover {
-                    border: 1px solid #3498db;
-                    background-color: #f8f9fa;
+                    border: 1px solid #cbd5e0;
+                    background-color: #f7fafc;
                 }
             """)
-            tarjeta.setCursor(Qt.PointingHandCursor)
         else:
-            # Tarjeta deshabilitada
-            tarjeta.setStyleSheet("""
+            # Estilo para módulos de solo lectura
+            card.setStyleSheet("""
                 QFrame {
-                    background-color: #f0f0f0;
-                    border-radius: 10px;
-                    border: 1px solid #dcdde1;
-                    opacity: 0.5;
+                    background-color: #f7fafc;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
+                    opacity: 0.7;
                 }
             """)
         
-        layout_tarjeta = QVBoxLayout()
-        layout_tarjeta.setContentsMargins(20, 20, 20, 20)
-        layout_tarjeta.setAlignment(Qt.AlignCenter)
-        tarjeta.setLayout(layout_tarjeta)
+        # Layout de la tarjeta
+        card_layout = QVBoxLayout()
+        card_layout.setContentsMargins(20, 20, 20, 20)
+        card_layout.setSpacing(6)
+        card.setLayout(card_layout)
         
-        label_icono = QLabel(icono)
-        label_icono.setStyleSheet("font-size: 48px;")
-        label_icono.setAlignment(Qt.AlignCenter)
+        # Icono
+        icon_label = QLabel(icono)
+        icon_label.setFont(QFont("Segoe UI", 36))
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setStyleSheet(f"""
+            background-color: {'#edf2f7' if enabled else '#e2e8f0'};
+            border-radius: 30px;
+            padding: 15px;
+        """)
+        icon_label.setFixedSize(70, 70)
         
-        label_titulo = QLabel(titulo)
-        label_titulo.setStyleSheet("font-size: 15px; font-weight: bold; color: #2c3e50;")
-        label_titulo.setAlignment(Qt.AlignCenter)
-        label_titulo.setWordWrap(True)
+        # Título
+        title_label = QLabel(titulo)
+        title_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        title_label.setStyleSheet(f"color: {'#2d3748' if enabled else '#a0aec0'};")
+        title_label.setAlignment(Qt.AlignCenter)
         
-        label_desc = QLabel(descripcion)
-        label_desc.setStyleSheet("font-size: 12px; color: #7f8c8d;")
-        label_desc.setAlignment(Qt.AlignCenter)
-        label_desc.setWordWrap(True)
+        # Descripción
+        desc_label = QLabel(descripcion)
+        desc_label.setFont(QFont("Segoe UI", 9))
+        desc_label.setStyleSheet(f"color: {'#718096' if enabled else '#a0aec0'};")
+        desc_label.setAlignment(Qt.AlignCenter)
+        desc_label.setWordWrap(True)
         
-        layout_tarjeta.addWidget(label_icono)
-        layout_tarjeta.addSpacing(10)
-        layout_tarjeta.addWidget(label_titulo)
-        layout_tarjeta.addSpacing(5)
-        layout_tarjeta.addWidget(label_desc)
+        # Añadir elementos
+        card_layout.addWidget(icon_label, alignment=Qt.AlignCenter)
+        card_layout.addWidget(title_label)
+        card_layout.addWidget(desc_label)
+        card_layout.addStretch()
         
-        if habilitado:
-            tarjeta.mousePressEvent = lambda event: funcion()
+        # Conectar evento de clic solo si está habilitado
+        if enabled:
+            card.mousePressEvent = lambda event: self.on_modulo_clicked(modulo)
         
-        return tarjeta
+        return card
         
-    # Funciones de navegación
-    def abrir_clientes(self):
-        if self.ventana_activa:
-            self.ventana_activa.close()
-        self.ventana_activa = ClienteView(self.datos_usuario)
-        self.ventana_activa.show()
+    def on_modulo_clicked(self, modulo):
+        """
+        Maneja el clic en un módulo.
         
-    def abrir_productos(self):
-        if self.ventana_activa:
-            self.ventana_activa.close()
-        self.ventana_activa = ProductoView(self.datos_usuario)
-        self.ventana_activa.show()
+        Args:
+            modulo (str): Nombre del módulo
+        """
+        print(f"Módulo seleccionado: {modulo}")
         
-    def abrir_empleados(self):
-        print("TODO: Abrir Empleados (filtrado por Loja)")
+        # Actualizar botones del sidebar
+        for nombre, btn in self.sidebar_buttons.items():
+            btn.setChecked(nombre == modulo)
         
-    def abrir_ventas(self):
-        print("TODO: Abrir Ventas (filtrado por Loja)")
+        # Abrir vista del módulo
+        if modulo == "Cliente":
+            self.open_cliente_view()
+        elif modulo == "Producto":
+            self.open_producto_view()
+        elif modulo == "Empleado":
+            self.open_empleado_view()
+        elif modulo == "Venta":
+            self.open_venta_view()
+        elif modulo == "Detalle Venta":
+            self.open_detalle_venta_view()
+        elif modulo == "Inventario":
+            self.open_inventario_view()
         
-    def abrir_detalle_venta(self):
-        print("TODO: Abrir Detalle Venta")
+    def open_cliente_view(self):
+        """
+        Abre la vista de Clientes.
+        """
+        from views.tablas.cliente_view import ClienteView
+        self.ventana_clientes = ClienteView(self.datos_usuario)
+        self.ventana_clientes.show()
+
+
+    def open_producto_view(self):
+        """
+        Abre la vista de Productos (SOLO LECTURA).
+        """
+        from views.tablas.producto_view import ProductoView
+        self.ventana_productos = ProductoView(self.datos_usuario)
+        self.ventana_productos.show()
+
+
+    def open_empleado_view(self):
+        """
+        Abre la vista de Empleados.
+        """
+        from views.tablas.empleado_view import EmpleadoView
+        self.ventana_empleados = EmpleadoView(self.datos_usuario)
+        self.ventana_empleados.show()
+
+
+    def open_venta_view(self):
+        """
+        Abre la vista de Ventas.
+        """
+        from views.tablas.venta_view import VentaView
+        self.ventana_ventas = VentaView(self.datos_usuario)
+        self.ventana_ventas.show()
+
+
+    def open_detalle_venta_view(self):
+        """
+        Abre la vista de Detalle de Venta.
+        """
+        from views.tablas.detalle_venta_view import DetalleVentaView
+        self.ventana_detalle_ventas = DetalleVentaView(self.datos_usuario)
+        self.ventana_detalle_ventas.show()
+
+
+    def open_inventario_view(self):
+        """
+        Abre la vista de Inventario.
+        """
+        from views.tablas.inventario_view import InventarioView
+        self.ventana_inventario = InventarioView(self.datos_usuario)
+        self.ventana_inventario.show()
+
+    def show_module_view(self, view_widget):
+        """
+        Muestra una vista de módulo en el contenido principal.
         
-    def abrir_inventario(self):
-        print("TODO: Abrir Inventario (filtrado por Loja)")
+        Args:
+            view_widget: Widget de la vista a mostrar
+        """
+        self.clear_content()
+        self.scroll_layout.addWidget(view_widget)
+        self.scroll_layout.addStretch()
         
-    def cerrar_sesion(self):
-        from views.login_view import LoginView
-        self.login = LoginView()
-        self.login.show()
+    def clear_content(self):
+        """
+        Limpia el contenido actual del scroll area.
+        """
+        while self.scroll_layout.count():
+            item = self.scroll_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+                
+    def logout(self):
+        """
+        Cierra sesión y vuelve al login.
+        """
+        from views.login_view import LoginWindow
+        
+        self.login_window = LoginWindow()
+        self.login_window.show()
         self.close()

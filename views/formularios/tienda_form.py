@@ -1,26 +1,25 @@
 # ==============================================================================
-# ARCHIVO: views/formularios/empleado_form.py
+# ARCHIVO: views/formularios/tienda_form.py
 # ==============================================================================
-"""Formulario para Empleados."""
+"""Formulario para Tiendas (solo Quito)."""
 
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QMessageBox)
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from database.consultas_quito import insertar_empleado_quito, actualizar_empleado_quito
-from database.consultas_loja import insertar_empleado_loja, actualizar_empleado_loja
+from database.consultas_quito import insertar_tienda_quito, actualizar_tienda_quito
 
 
-class EmpleadoForm(QDialog):
+class TiendaForm(QDialog):
     def __init__(self, datos_usuario, modo='nuevo', datos=None):
         super().__init__()
         self.datos_usuario = datos_usuario
-        self.nodo = datos_usuario['nodo']
         self.modo = modo
         self.datos = datos or {}
         self.init_ui()
         
     def init_ui(self):
-        self.setWindowTitle("Nuevo Empleado" if self.modo == 'nuevo' else "Editar Empleado")
+        self.setWindowTitle("Nueva Tienda" if self.modo == 'nuevo' else "Editar Tienda")
         self.setFixedSize(500, 400)
         self.setModal(True)
         
@@ -29,42 +28,57 @@ class EmpleadoForm(QDialog):
         layout.setSpacing(15)
         self.setLayout(layout)
         
-        title = QLabel("Nuevo Empleado" if self.modo == 'nuevo' else "Editar Empleado")
+        # Título
+        title = QLabel("Nueva Tienda" if self.modo == 'nuevo' else "Editar Tienda")
         title.setFont(QFont("Segoe UI", 18, QFont.Bold))
         layout.addWidget(title)
         
         # Nombre
         layout.addWidget(QLabel("Nombre"))
         self.input_nombre = QLineEdit()
+        self.input_nombre.setPlaceholderText("Ingrese el nombre de la tienda")
         self.input_nombre.setFixedHeight(40)
         if self.modo == 'editar':
             self.input_nombre.setText(self.datos.get('nombre', ''))
         layout.addWidget(self.input_nombre)
         
+        # Ciudad
+        layout.addWidget(QLabel("Ciudad"))
+        self.input_ciudad = QLineEdit()
+        self.input_ciudad.setPlaceholderText("Ingrese la ciudad")
+        self.input_ciudad.setFixedHeight(40)
+        if self.modo == 'editar':
+            self.input_ciudad.setText(self.datos.get('ciudad', ''))
+        layout.addWidget(self.input_ciudad)
+        
+        # Dirección
+        layout.addWidget(QLabel("Dirección"))
+        self.input_direccion = QLineEdit()
+        self.input_direccion.setPlaceholderText("Ingrese la dirección")
+        self.input_direccion.setFixedHeight(40)
+        if self.modo == 'editar':
+            self.input_direccion.setText(self.datos.get('direccion', ''))
+        layout.addWidget(self.input_direccion)
+        
         # Teléfono
         layout.addWidget(QLabel("Teléfono"))
         self.input_telefono = QLineEdit()
+        self.input_telefono.setPlaceholderText("Ingrese el teléfono")
         self.input_telefono.setFixedHeight(40)
         if self.modo == 'editar':
             self.input_telefono.setText(self.datos.get('telefono', ''))
         layout.addWidget(self.input_telefono)
-        
-        # Cargo
-        layout.addWidget(QLabel("Cargo"))
-        self.input_cargo = QLineEdit()
-        self.input_cargo.setFixedHeight(40)
-        if self.modo == 'editar':
-            self.input_cargo.setText(self.datos.get('cargo', ''))
-        layout.addWidget(self.input_cargo)
         
         layout.addStretch()
         
         # Botones
         buttons = QHBoxLayout()
         btn_cancelar = QPushButton("Cancelar")
+        btn_cancelar.setFixedHeight(40)
         btn_cancelar.clicked.connect(self.reject)
         
         btn_guardar = QPushButton("Guardar")
+        btn_guardar.setFixedHeight(40)
         btn_guardar.setStyleSheet("background-color: #3d5a80; color: white; font-weight: bold;")
         btn_guardar.clicked.connect(self.guardar)
         
@@ -74,31 +88,23 @@ class EmpleadoForm(QDialog):
         
     def guardar(self):
         nombre = self.input_nombre.text().strip()
+        ciudad = self.input_ciudad.text().strip()
+        direccion = self.input_direccion.text().strip()
         telefono = self.input_telefono.text().strip()
-        cargo = self.input_cargo.text().strip()
         
-        if not nombre:
-            QMessageBox.warning(self, "Error", "El nombre es obligatorio")
+        if not nombre or not ciudad:
+            QMessageBox.warning(self, "Error", "Nombre y Ciudad son obligatorios")
             return
             
-        # ID tienda según nodo: Quito=1 o 2, Loja=3
-        id_tienda = 1 if self.nodo == 'gestion' else 3
-        
         if self.modo == 'nuevo':
-            if self.nodo == 'gestion':
-                ok = insertar_empleado_quito(nombre, telefono, cargo, id_tienda)
-            else:
-                ok = insertar_empleado_loja(nombre, telefono, cargo, id_tienda)
+            ok = insertar_tienda_quito(nombre, ciudad, direccion, telefono)
         else:
-            if self.nodo == 'gestion':
-                ok = actualizar_empleado_quito(self.datos['id'], nombre, telefono, cargo)
-            else:
-                ok = actualizar_empleado_loja(self.datos['id'], nombre, telefono, cargo)
-                
+            ok = actualizar_tienda_quito(self.datos['id'], nombre, ciudad, direccion, telefono)
+            
         if ok:
-            QMessageBox.information(self, "Éxito", "Empleado guardado")
+            QMessageBox.information(self, "Éxito", "Tienda guardada correctamente")
             self.accept()
         else:
-            QMessageBox.critical(self, "Error", "No se pudo guardar")
+            QMessageBox.critical(self, "Error", "No se pudo guardar la tienda")
 
 

@@ -1,322 +1,134 @@
-"""
-views/formularios/producto_form.py
-===================================
-Formulario para crear/editar productos.
-Basado en la Imagen 4 del diseño proporcionado.
+# ==============================================================================
+# ARCHIVO: views/formularios/producto_form.py
+# ==============================================================================
+"""Formulario para Productos (solo Quito puede editar)."""
 
-Autor: Sistema BDD Distribuida
-Fecha: Enero 2026
-"""
-
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-                             QLineEdit, QTextEdit, QPushButton, QMessageBox)
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+                             QLineEdit, QPushButton, QMessageBox, QDoubleSpinBox, QSpinBox)
 from PyQt5.QtGui import QFont
+from database.consultas_quito import insertar_producto_quito, actualizar_producto_quito
 
 
 class ProductoForm(QDialog):
-    """
-    Formulario para crear o editar un producto.
-    
-    Señales:
-        producto_guardado: Se emite cuando se guarda exitosamente
-    """
-    
-    producto_guardado = pyqtSignal()
-    
-    def __init__(self, datos_usuario, producto=None):
+    def __init__(self, datos_usuario, modo='nuevo', datos=None):
         super().__init__()
         self.datos_usuario = datos_usuario
-        self.producto = producto  # None para nuevo, dict para editar
-        self.es_edicion = producto is not None
-        self.inicializar_ui()
+        self.modo = modo
+        self.datos = datos or {}
+        self.init_ui()
         
-        if self.es_edicion:
-            self.cargar_datos_producto()
-            
-    def inicializar_ui(self):
-        """Configura la interfaz del formulario."""
-        # Configuración del diálogo
-        titulo = "Editar Producto" if self.es_edicion else "Nuevo Producto"
-        self.setWindowTitle(titulo)
-        self.setFixedSize(600, 500)
+    def init_ui(self):
+        self.setWindowTitle("Nuevo Producto" if self.modo == 'nuevo' else "Editar Producto")
+        self.setFixedSize(550, 550)
         self.setModal(True)
-        self.setStyleSheet("background-color: white;")
         
-        # Layout principal
-        layout_principal = QVBoxLayout()
-        layout_principal.setContentsMargins(40, 30, 40, 30)
-        layout_principal.setSpacing(20)
-        self.setLayout(layout_principal)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(15)
+        self.setLayout(layout)
         
-        # Título
-        label_titulo = QLabel(titulo)
-        label_titulo.setStyleSheet("""
-            font-size: 20px;
-            font-weight: bold;
-            color: #2c3e50;
-        """)
-        layout_principal.addWidget(label_titulo)
+        title = QLabel("Nuevo Producto" if self.modo == 'nuevo' else "Editar Producto")
+        title.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        layout.addWidget(title)
         
-        # Campos del formulario
-        self.crear_campos(layout_principal)
-        
-        # Botones
-        self.crear_botones(layout_principal)
-        
-    def crear_campos(self, layout_padre):
-        """Crea los campos del formulario."""
-        
-        # ========== NOMBRE ==========
-        label_nombre = QLabel("Nombre")
-        label_nombre.setStyleSheet("font-size: 13px; font-weight: 500; color: #2c3e50;")
-        
+        # Nombre
+        layout.addWidget(QLabel("Nombre"))
         self.input_nombre = QLineEdit()
         self.input_nombre.setPlaceholderText("Ingrese el nombre del producto")
-        self.input_nombre.setStyleSheet(self.estilo_input())
-        self.input_nombre.setMinimumHeight(40)
+        self.input_nombre.setFixedHeight(40)
+        if self.modo == 'editar':
+            self.input_nombre.setText(self.datos.get('nombre', ''))
+        layout.addWidget(self.input_nombre)
         
-        # ========== DESCRIPCIÓN ==========
-        label_descripcion = QLabel("Descripción")
-        label_descripcion.setStyleSheet("font-size: 13px; font-weight: 500; color: #2c3e50;")
+        # Marca
+        layout.addWidget(QLabel("Marca"))
+        self.input_marca = QLineEdit()
+        self.input_marca.setFixedHeight(40)
+        if self.modo == 'editar':
+            self.input_marca.setText(self.datos.get('marca', ''))
+        layout.addWidget(self.input_marca)
         
-        self.input_descripcion = QTextEdit()
-        self.input_descripcion.setPlaceholderText("Descripción breve del producto")
-        self.input_descripcion.setStyleSheet(self.estilo_input())
-        self.input_descripcion.setMaximumHeight(80)
+        # Modelo
+        layout.addWidget(QLabel("Modelo"))
+        self.input_modelo = QLineEdit()
+        self.input_modelo.setFixedHeight(40)
+        if self.modo == 'editar':
+            self.input_modelo.setText(self.datos.get('modelo', ''))
+        layout.addWidget(self.input_modelo)
         
-        # ========== CÓDIGO ==========
-        label_codigo = QLabel("Código")
-        label_codigo.setStyleSheet("font-size: 13px; font-weight: 500; color: #2c3e50;")
+        # Categoría
+        layout.addWidget(QLabel("Categoría"))
+        self.input_categoria = QLineEdit()
+        self.input_categoria.setFixedHeight(40)
+        if self.modo == 'editar':
+            self.input_categoria.setText(self.datos.get('categoria', ''))
+        layout.addWidget(self.input_categoria)
         
-        self.input_codigo = QLineEdit()
-        self.input_codigo.setPlaceholderText("Ingrese el código del producto")
-        self.input_codigo.setStyleSheet(self.estilo_input())
-        self.input_codigo.setMinimumHeight(40)
+        # Precio y Stock en fila
+        row = QHBoxLayout()
         
-        # ========== PRECIO Y STOCK (en horizontal) ==========
-        layout_horizontal = QHBoxLayout()
-        layout_horizontal.setSpacing(15)
+        col1 = QVBoxLayout()
+        col1.addWidget(QLabel("Precio ($)"))
+        self.input_precio = QDoubleSpinBox()
+        self.input_precio.setRange(0, 999999)
+        self.input_precio.setDecimals(2)
+        self.input_precio.setPrefix("$ ")
+        self.input_precio.setFixedHeight(40)
+        if self.modo == 'editar':
+            self.input_precio.setValue(self.datos.get('precio', 0))
+        col1.addWidget(self.input_precio)
         
-        # Precio
-        layout_precio = QVBoxLayout()
-        layout_precio.setSpacing(5)
+        col2 = QVBoxLayout()
+        col2.addWidget(QLabel("Stock Mínimo"))
+        self.input_stock = QSpinBox()
+        self.input_stock.setRange(0, 9999)
+        self.input_stock.setFixedHeight(40)
+        if self.modo == 'editar':
+            self.input_stock.setValue(self.datos.get('stock_minimo', 0))
+        col2.addWidget(self.input_stock)
         
-        label_precio = QLabel("Precio")
-        label_precio.setStyleSheet("font-size: 13px; font-weight: 500; color: #2c3e50;")
+        row.addLayout(col1)
+        row.addLayout(col2)
+        layout.addLayout(row)
         
-        self.input_precio = QLineEdit()
-        self.input_precio.setPlaceholderText("Ingrese el precio del producto")
-        self.input_precio.setStyleSheet(self.estilo_input())
-        self.input_precio.setMinimumHeight(40)
+        layout.addStretch()
         
-        layout_precio.addWidget(label_precio)
-        layout_precio.addWidget(self.input_precio)
-        
-        # Stock
-        layout_stock = QVBoxLayout()
-        layout_stock.setSpacing(5)
-        
-        label_stock = QLabel("Stock")
-        label_stock.setStyleSheet("font-size: 13px; font-weight: 500; color: #2c3e50;")
-        
-        self.input_stock = QLineEdit()
-        self.input_stock.setPlaceholderText("Cantidad inicial en stock")
-        self.input_stock.setStyleSheet(self.estilo_input())
-        self.input_stock.setMinimumHeight(40)
-        
-        layout_stock.addWidget(label_stock)
-        layout_stock.addWidget(self.input_stock)
-        
-        layout_horizontal.addLayout(layout_precio)
-        layout_horizontal.addLayout(layout_stock)
-        
-        # Añadir todo al layout padre
-        layout_padre.addWidget(label_nombre)
-        layout_padre.addWidget(self.input_nombre)
-        layout_padre.addWidget(label_descripcion)
-        layout_padre.addWidget(self.input_descripcion)
-        layout_padre.addWidget(label_codigo)
-        layout_padre.addWidget(self.input_codigo)
-        layout_padre.addLayout(layout_horizontal)
-        
-    def crear_botones(self, layout_padre):
-        """Crea los botones del formulario."""
-        layout_botones = QHBoxLayout()
-        layout_botones.setSpacing(10)
-        
-        # Espacio flexible a la izquierda
-        layout_botones.addStretch()
-        
-        # Botón Cancelar
+        # Botones
+        buttons = QHBoxLayout()
         btn_cancelar = QPushButton("Cancelar")
-        btn_cancelar.setFixedSize(120, 45)
-        btn_cancelar.setStyleSheet("""
-            QPushButton {
-                background-color: white;
-                color: #7f8c8d;
-                border: 1px solid #dcdde1;
-                border-radius: 5px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #ecf0f1;
-                border-color: #95a5a6;
-            }
-        """)
-        btn_cancelar.setCursor(Qt.PointingHandCursor)
+        btn_cancelar.setFixedHeight(40)
         btn_cancelar.clicked.connect(self.reject)
         
-        # Botón Guardar
         btn_guardar = QPushButton("Guardar")
-        btn_guardar.setFixedSize(120, 45)
-        btn_guardar.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-            QPushButton:pressed {
-                background-color: #1f618d;
-            }
-        """)
-        btn_guardar.setCursor(Qt.PointingHandCursor)
-        btn_guardar.clicked.connect(self.guardar_producto)
+        btn_guardar.setFixedHeight(40)
+        btn_guardar.setStyleSheet("background-color: #3d5a80; color: white; font-weight: bold;")
+        btn_guardar.clicked.connect(self.guardar)
         
-        layout_botones.addWidget(btn_cancelar)
-        layout_botones.addWidget(btn_guardar)
+        buttons.addWidget(btn_cancelar)
+        buttons.addWidget(btn_guardar)
+        layout.addLayout(buttons)
         
-        layout_padre.addStretch()
-        layout_padre.addLayout(layout_botones)
-        
-    def estilo_input(self):
-        """Retorna el estilo CSS para inputs."""
-        return """
-            QLineEdit, QTextEdit {
-                border: 1px solid #dcdde1;
-                border-radius: 5px;
-                padding: 10px;
-                font-size: 13px;
-                background-color: #f8f9fa;
-            }
-            QLineEdit:focus, QTextEdit:focus {
-                border: 1px solid #3498db;
-                background-color: white;
-            }
-        """
-        
-    def cargar_datos_producto(self):
-        """Carga los datos del producto en el formulario (modo edición)."""
-        self.input_nombre.setText(self.producto['nombre'])
-        self.input_descripcion.setPlainText(self.producto.get('descripcion', ''))
-        self.input_codigo.setText(self.producto['codigo'])
-        self.input_precio.setText(str(self.producto['precio']))
-        self.input_stock.setText(str(self.producto.get('stock', 0)))
-        
-    def validar_campos(self):
-        """
-        Valida que los campos estén correctamente llenados.
-        
-        Returns:
-            bool: True si es válido, False si no
-        """
-        # Validar nombre
-        if not self.input_nombre.text().strip():
-            QMessageBox.warning(self, "Validación", "El nombre del producto es obligatorio")
-            self.input_nombre.setFocus()
-            return False
-        
-        # Validar código
-        if not self.input_codigo.text().strip():
-            QMessageBox.warning(self, "Validación", "El código del producto es obligatorio")
-            self.input_codigo.setFocus()
-            return False
-        
-        # Validar precio
-        try:
-            precio = float(self.input_precio.text().strip())
-            if precio <= 0:
-                raise ValueError()
-        except:
-            QMessageBox.warning(self, "Validación", "El precio debe ser un número mayor a 0")
-            self.input_precio.setFocus()
-            return False
-        
-        # Validar stock
-        try:
-            stock = int(self.input_stock.text().strip())
-            if stock < 0:
-                raise ValueError()
-        except:
-            QMessageBox.warning(self, "Validación", "El stock debe ser un número entero positivo")
-            self.input_stock.setFocus()
-            return False
-        
-        return True
-        
-    def guardar_producto(self):
-        """
-        Guarda el producto en la base de datos.
-        
-        ⚠️ TODO: Implementar INSERT/UPDATE en SQL Server
-        
-        Para NUEVO producto:
-        INSERT INTO producto (nombre, descripcion, codigo, precio)
-        VALUES (?, ?, ?, ?)
-        
-        Para EDITAR producto:
-        UPDATE producto
-        SET nombre = ?, descripcion = ?, codigo = ?, precio = ?
-        WHERE idProducto = ?
-        
-        Además, actualizar el inventario:
-        INSERT/UPDATE inventario (fkIdProducto, fkIdTienda, stock)
-        """
-        # Validar campos
-        if not self.validar_campos():
-            return
-        
-        # Obtener valores
+    def guardar(self):
         nombre = self.input_nombre.text().strip()
-        descripcion = self.input_descripcion.toPlainText().strip()
-        codigo = self.input_codigo.text().strip()
-        precio = float(self.input_precio.text().strip())
-        stock = int(self.input_stock.text().strip())
+        marca = self.input_marca.text().strip()
+        modelo = self.input_modelo.text().strip()
+        categoria = self.input_categoria.text().strip()
+        precio = self.input_precio.value()
+        stock_min = self.input_stock.value()
         
-        # TODO: Aquí va la lógica de INSERT/UPDATE a SQL Server
-        print("=" * 60)
-        print("TODO: GUARDAR EN SQL SERVER")
-        print("=" * 60)
-        
-        if self.es_edicion:
-            print(f"UPDATE producto WHERE idProducto = {self.producto['id']}")
-            print(f"  nombre = '{nombre}'")
-            print(f"  descripcion = '{descripcion}'")
-            print(f"  codigo = '{codigo}'")
-            print(f"  precio = {precio}")
-            print(f"UPDATE inventario SET stock = {stock}")
+        if not nombre:
+            QMessageBox.warning(self, "Error", "El nombre es obligatorio")
+            return
+            
+        if self.modo == 'nuevo':
+            ok = insertar_producto_quito(nombre, marca, modelo, categoria, precio, stock_min)
         else:
-            print("INSERT INTO producto")
-            print(f"  (nombre, descripcion, codigo, precio)")
-            print(f"  VALUES ('{nombre}', '{descripcion}', '{codigo}', {precio})")
-            print(f"INSERT INTO inventario (fkIdProducto, fkIdTienda, stock)")
-            print(f"  VALUES (LAST_INSERT_ID(), {self.datos_usuario.get('id_tienda', 1)}, {stock})")
-        
-        print("=" * 60)
-        
-        # Mostrar mensaje de éxito
-        mensaje = "Producto actualizado correctamente" if self.es_edicion else "Producto creado correctamente"
-        QMessageBox.information(self, "Éxito", mensaje)
-        
-        # Emitir señal de guardado
-        self.producto_guardado.emit()
-        
-        # Cerrar formulario
-        self.accept()
+            ok = actualizar_producto_quito(self.datos['id'], nombre, marca, modelo, categoria, precio, stock_min)
+                
+        if ok:
+            QMessageBox.information(self, "Éxito", "Producto guardado correctamente")
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Error", "No se pudo guardar el producto")
+
+

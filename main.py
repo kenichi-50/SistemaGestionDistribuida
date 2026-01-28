@@ -12,7 +12,7 @@ import sys
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from views.login_view import LoginView
+from views.login_view import LoginWindow
 
 
 def main():
@@ -30,7 +30,7 @@ def main():
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     
     # Crear y mostrar ventana de login
-    login = LoginView()
+    login = LoginWindow()
     login.show()
     
     # Ejecutar aplicación

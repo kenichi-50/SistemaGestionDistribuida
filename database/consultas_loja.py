@@ -1,181 +1,33 @@
 """
-database/conexion.py
-====================
-Conexiones a SQL Server para el sistema distribuido.
+database/consultas_loja.py
+===========================
+Consultas SQL para el Nodo de Operación (Loja).
 
-Nodos:
-- Gestión (Quito): Base de datos NexusTech_Quito
-- Operación (Loja): Base de datos NexusTech_Loja
+Funcionalidades:
+- CRUD de Clientes
+- Consulta de Productos (SOLO LECTURA)
+- CRUD de Empleados (solo Loja)
+- CRUD de Ventas (solo Loja)
+- Consulta de Inventario (solo Loja)
+
+IMPORTANTE: NO tiene acceso a Tiendas
 
 Autor: Sistema BDD Distribuida
 Fecha: Enero 2026
 """
 
+from database.conexion import conectar_loja, cerrar_conexion
 import pyodbc
 
 
 # ============================================================
-# CONFIGURACIÓN DE CONEXIONES
-# ============================================================
-
-CONFIG_QUITO = {
-    'driver': 'ODBC Driver 18 for SQL Server',
-    'server': 'HARRYPC',
-    'database': 'NexusTech_QuitoCentral',
-    'username': 'sa',
-    'password': 'P@ssw0rd',
-    'trust_certificate': 'yes'
-}
-
-CONFIG_LOJA = {
-    'driver': 'ODBC Driver 18 for SQL Server',
-    'server': 'JOEL',
-    'database': 'NexusTech_Loja',
-    'username': 'sa',
-    'password': 'P@ssw0rd',
-    'trust_certificate': 'yes'
-}
-
-
-# ============================================================
-# FUNCIONES DE CONEXIÓN
-# ============================================================
-
-def conectar_quito():
-    """
-    Establece conexión con el Nodo de Gestión (Quito).
-    
-    Returns:
-        connection: Objeto de conexión pyodbc o None si falla
-    """
-    try:
-        conexion = pyodbc.connect(
-            f"DRIVER={{{CONFIG_QUITO['driver']}}};"
-            f"SERVER={CONFIG_QUITO['server']};"
-            f"DATABASE={CONFIG_QUITO['database']};"
-            f"UID={CONFIG_QUITO['username']};"
-            f"PWD={CONFIG_QUITO['password']};"
-            f"TrustServerCertificate={CONFIG_QUITO['trust_certificate']};"
-        )
-        print("✓ Conectado al Nodo Quito (Gestión)")
-        return conexion
-    except pyodbc.Error as e:
-        print(f"✗ Error al conectar con SQL Server (Nodo Quito): {e}")
-        return None
-
-
-def conectar_loja():
-    """
-    Establece conexión con el Nodo de Operación (Loja).
-    
-    Returns:
-        connection: Objeto de conexión pyodbc o None si falla
-    """
-    try:
-        conexion = pyodbc.connect(
-            f"DRIVER={{{CONFIG_LOJA['driver']}}};"
-            f"SERVER={CONFIG_LOJA['server']};"
-            f"DATABASE={CONFIG_LOJA['database']};"
-            f"UID={CONFIG_LOJA['username']};"
-            f"PWD={CONFIG_LOJA['password']};"
-            f"TrustServerCertificate={CONFIG_LOJA['trust_certificate']};"
-        )
-        print("✓ Conectado al Nodo Loja (Operación)")
-        return conexion
-    except pyodbc.Error as e:
-        print(f"✗ Error al conectar con SQL Server (Nodo Loja): {e}")
-        return None
-
-
-def conectar_segun_nodo(nodo):
-    """
-    Conecta según el tipo de nodo.
-    
-    Args:
-        nodo (str): 'gestion' o 'operacion'
-        
-    Returns:
-        connection: Conexión correspondiente
-    """
-    if nodo == 'gestion':
-        return conectar_quito()
-    elif nodo == 'operacion':
-        return conectar_loja()
-    else:
-        print(f"✗ Nodo '{nodo}' no reconocido")
-        return None
-
-
-def cerrar_conexion(conexion):
-    """
-    Cierra una conexión de forma segura.
-    
-    Args:
-        conexion: Objeto de conexión a cerrar
-    """
-    if conexion:
-        try:
-            conexion.close()
-            print("✓ Conexión cerrada correctamente")
-        except Exception as e:
-            print(f"✗ Error al cerrar conexión: {e}")
-
-
-# ============================================================
-# FUNCIONES DE AUTENTICACIÓN
-# ============================================================
-
-def validar_usuario_sql(usuario, password):
-    """
-    Valida credenciales de usuario contra SQL Server.
-    
-    NOTA: Por ahora probamos con Nodo Loja.
-    En producción, deberías tener una tabla 'usuario' centralizada.
-    
-    Args:
-        usuario (str): Nombre de usuario
-        password (str): Contraseña (en producción usar hash)
-        
-    Returns:
-        dict: Datos del usuario si es válido, None si no
-    """
-    # Mapeo temporal de usuarios
-    # En producción esto vendría de una tabla usuario
-    usuarios_temporales = {
-        'admin': {
-            'password': '1234',
-            'nodo': 'gestion',
-            'ciudad': 'Quito',
-            'nombre_completo': 'Administrador del Sistema'
-        },
-        'operador': {
-            'password': '1234',
-            'nodo': 'operacion',
-            'ciudad': 'Loja',
-            'nombre_completo': 'Operador de Sede'
-        }
-    }
-    
-    if usuario in usuarios_temporales:
-        datos = usuarios_temporales[usuario]
-        if datos['password'] == password:
-            return {
-                'usuario': usuario,
-                'nodo': datos['nodo'],
-                'ciudad': datos['ciudad'],
-                'nombre_completo': datos['nombre_completo']
-            }
-    
-    return None
-
-
-# ============================================================
-# FUNCIONES CRUD - CLIENTES (Nodo Loja)
+# CRUD - CLIENTES (Loja)
 # ============================================================
 
 def obtener_clientes_loja():
     """
-    Obtiene todos los clientes del Nodo Loja.
+    Obtiene todos los clientes desde Loja.
+    Los clientes se replican, por lo que ambos nodos los ven.
     
     Returns:
         list: Lista de diccionarios con datos de clientes
@@ -206,9 +58,9 @@ def obtener_clientes_loja():
             clientes.append({
                 'id': row[0],
                 'nombre': row[1],
-                'direccion': row[2],
-                'telefono': row[3],
-                'correo': row[4],
+                'direccion': row[2] if row[2] else '',
+                'telefono': row[3] if row[3] else '',
+                'correo': row[4] if row[4] else '',
                 'fecha_registro': str(row[5]) if row[5] else '',
                 'rowguid': str(row[6]) if row[6] else ''
             })
@@ -225,7 +77,7 @@ def obtener_clientes_loja():
 
 def insertar_cliente_loja(nombre, direccion, telefono, correo):
     """
-    Inserta un nuevo cliente en el Nodo Loja.
+    Inserta un nuevo cliente en Loja.
     
     Args:
         nombre (str): Nombre del cliente
@@ -234,7 +86,7 @@ def insertar_cliente_loja(nombre, direccion, telefono, correo):
         correo (str): Correo electrónico
         
     Returns:
-        bool: True si se insertó correctamente, False si no
+        bool: True si se insertó correctamente
     """
     conexion = conectar_loja()
     if not conexion:
@@ -249,7 +101,7 @@ def insertar_cliente_loja(nombre, direccion, telefono, correo):
         cursor.execute(query, (nombre, direccion, telefono, correo))
         conexion.commit()
         
-        print(f"✓ Cliente '{nombre}' insertado correctamente")
+        print(f"✓ Cliente '{nombre}' insertado correctamente en Loja")
         cursor.close()
         cerrar_conexion(conexion)
         return True
@@ -263,17 +115,17 @@ def insertar_cliente_loja(nombre, direccion, telefono, correo):
 
 def actualizar_cliente_loja(id_cliente, nombre, direccion, telefono, correo):
     """
-    Actualiza un cliente existente en el Nodo Loja.
+    Actualiza un cliente existente en Loja.
     
     Args:
         id_cliente (int): ID del cliente
-        nombre (str): Nombre del cliente
+        nombre (str): Nombre
         direccion (str): Dirección
         telefono (str): Teléfono
-        correo (str): Correo electrónico
+        correo (str): Correo
         
     Returns:
-        bool: True si se actualizó correctamente, False si no
+        bool: True si se actualizó correctamente
     """
     conexion = conectar_loja()
     if not conexion:
@@ -303,13 +155,13 @@ def actualizar_cliente_loja(id_cliente, nombre, direccion, telefono, correo):
 
 def eliminar_cliente_loja(id_cliente):
     """
-    Elimina un cliente del Nodo Loja.
+    Elimina un cliente de Loja.
     
     Args:
         id_cliente (int): ID del cliente
         
     Returns:
-        bool: True si se eliminó correctamente, False si no
+        bool: True si se eliminó correctamente
     """
     conexion = conectar_loja()
     if not conexion:
@@ -334,7 +186,7 @@ def eliminar_cliente_loja(id_cliente):
 
 
 # ============================================================
-# FUNCIONES CONSULTA - PRODUCTOS (SOLO LECTURA en Loja)
+# CONSULTA - PRODUCTOS (SOLO LECTURA en Loja)
 # ============================================================
 
 def obtener_productos_loja():
@@ -342,7 +194,7 @@ def obtener_productos_loja():
     Obtiene todos los productos (SOLO LECTURA).
     
     Los productos son gestionados desde Quito.
-    Loja solo puede consultarlos.
+    Loja solo puede consultarlos para ventas.
     
     Returns:
         list: Lista de diccionarios con datos de productos
@@ -376,7 +228,7 @@ def obtener_productos_loja():
                 'marca': row[2] if row[2] else '',
                 'modelo': row[3] if row[3] else '',
                 'categoria': row[4] if row[4] else '',
-                'precio': row[5] / 100.0 if row[5] else 0.0,  # Convertir centavos a dólares
+                'precio': row[5] / 100.0 if row[5] else 0.0,
                 'stock_minimo': row[6] if row[6] else 0
             })
         
@@ -391,12 +243,12 @@ def obtener_productos_loja():
 
 
 # ============================================================
-# FUNCIONES CRUD - EMPLEADOS (Nodo Loja)
+# CRUD - EMPLEADOS (Solo empleados de Loja)
 # ============================================================
 
 def obtener_empleados_loja():
     """
-    Obtiene todos los empleados del Nodo Loja.
+    Obtiene los empleados de Loja (fkIdTienda = 3).
     
     Returns:
         list: Lista de diccionarios con datos de empleados
@@ -442,9 +294,9 @@ def obtener_empleados_loja():
         return []
 
 
-def insertar_empleado_loja(nombre, telefono, cargo, id_tienda):
+def insertar_empleado_loja(nombre, telefono, cargo, id_tienda=3):
     """
-    Inserta un nuevo empleado en el Nodo Loja.
+    Inserta un nuevo empleado en Loja.
     
     Args:
         nombre (str): Nombre del empleado
@@ -468,7 +320,7 @@ def insertar_empleado_loja(nombre, telefono, cargo, id_tienda):
         cursor.execute(query, (nombre, telefono, cargo, id_tienda))
         conexion.commit()
         
-        print(f"✓ Empleado '{nombre}' insertado correctamente")
+        print(f"✓ Empleado '{nombre}' insertado correctamente en Loja")
         cursor.close()
         cerrar_conexion(conexion)
         return True
@@ -482,7 +334,7 @@ def insertar_empleado_loja(nombre, telefono, cargo, id_tienda):
 
 def actualizar_empleado_loja(id_empleado, nombre, telefono, cargo):
     """
-    Actualiza un empleado existente en el Nodo Loja.
+    Actualiza un empleado existente en Loja.
     
     Args:
         id_empleado (int): ID del empleado
@@ -521,7 +373,7 @@ def actualizar_empleado_loja(id_empleado, nombre, telefono, cargo):
 
 def eliminar_empleado_loja(id_empleado):
     """
-    Elimina un empleado del Nodo Loja.
+    Elimina un empleado de Loja.
     
     Args:
         id_empleado (int): ID del empleado
@@ -552,63 +404,12 @@ def eliminar_empleado_loja(id_empleado):
 
 
 # ============================================================
-# FUNCIONES CONSULTA - INVENTARIO (SOLO LECTURA en Loja)
-# ============================================================
-
-def obtener_inventario_loja():
-    """
-    Obtiene el inventario actual del Nodo Loja.
-    
-    El inventario NO se modifica manualmente.
-    Se actualiza automáticamente con las ventas.
-    
-    Returns:
-        list: Lista de diccionarios con el inventario
-    """
-    conexion = conectar_loja()
-    if not conexion:
-        return []
-    
-    try:
-        cursor = conexion.cursor()
-        query = """
-            SELECT 
-                i.fkIdTienda,
-                i.fkIdProducto,
-                i.stock,
-                i.fechaActualizacion
-            FROM dbo.Inventario_Loja i
-            ORDER BY i.fkIdProducto
-        """
-        cursor.execute(query)
-        resultados = cursor.fetchall()
-        
-        inventario = []
-        for row in resultados:
-            inventario.append({
-                'id_tienda': row[0],
-                'id_producto': row[1],
-                'stock': row[2],
-                'fecha_actualizacion': str(row[3]) if row[3] else ''
-            })
-        
-        cursor.close()
-        cerrar_conexion(conexion)
-        return inventario
-        
-    except pyodbc.Error as e:
-        print(f"✗ Error al obtener inventario: {e}")
-        cerrar_conexion(conexion)
-        return []
-
-
-# ============================================================
-# FUNCIONES CRUD - VENTAS (Nodo Loja)
+# CRUD - VENTAS (Solo ventas de Loja)
 # ============================================================
 
 def obtener_ventas_loja():
     """
-    Obtiene todas las ventas del Nodo Loja.
+    Obtiene las ventas de Loja (fkIdTienda = 3).
     
     Returns:
         list: Lista de diccionarios con datos de ventas
@@ -640,7 +441,7 @@ def obtener_ventas_loja():
             ventas.append({
                 'id': row[0],
                 'fecha': str(row[1]) if row[1] else '',
-                'total': row[2] / 100.0 if row[2] else 0.0,  # Convertir centavos a dólares
+                'total': row[2] / 100.0 if row[2] else 0.0,
                 'id_cliente': row[3],
                 'id_empleado': row[4],
                 'id_tienda': row[5],
@@ -659,9 +460,9 @@ def obtener_ventas_loja():
 
 def insertar_venta_loja(id_cliente, id_empleado, id_tienda, detalles):
     """
-    Inserta una nueva venta con sus detalles en el Nodo Loja.
+    Inserta una nueva venta con detalles en Loja.
     
-    Esta función realiza múltiples operaciones:
+    Realiza múltiples operaciones:
     1. Calcula el total de la venta
     2. Inserta la cabecera de venta
     3. Inserta los detalles de venta
@@ -692,53 +493,67 @@ def insertar_venta_loja(id_cliente, id_empleado, id_tienda, detalles):
         total_cents = sum(int(d['precio_unitario'] * 100) * d['cantidad'] for d in detalles)
         
         # 1. Insertar cabecera de venta
-        query_venta = """
+        cursor.execute("""
             INSERT INTO dbo.Venta_Loja (totalCents, fkIdCliente, fkIdEmpleado, fkIdTienda)
             VALUES (?, ?, ?, ?);
             SELECT SCOPE_IDENTITY();
-        """
-        cursor.execute(query_venta, (total_cents, id_cliente, id_empleado, id_tienda))
+        """, (total_cents, id_cliente, id_empleado, id_tienda))
+
+
         id_venta = cursor.fetchone()[0]
         
+        cursor.execute("SET XACT_ABORT ON")
+
         # 2. Insertar detalles de venta
         query_detalle = """
-            INSERT INTO dbo.DetalleVenta_Loja (fkIdVenta, nLineaId, fkIdProducto)
-            VALUES (?, ?, ?)
+            INSERT INTO dbo.DetalleVenta_Loja (
+                fkIdVenta,
+                nLineaId,
+                fkIdProducto,
+                cantidad,
+                precioUnitCents,
+                fkIdTienda
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
         """
         for idx, detalle in enumerate(detalles, start=1):
-            cursor.execute(query_detalle, (int(id_venta), idx, detalle['id_producto']))
-        
+            cursor.execute(
+                query_detalle,
+                (
+                    int(id_venta),
+                    idx,
+                    detalle['id_producto'],
+                    detalle['cantidad'],
+                    int(detalle['precio_unitario'] * 100),
+                    id_tienda
+                )
+            )
+
         # 3. Actualizar inventario (restar stock)
-        query_inventario = """
-            UPDATE dbo.Inventario_Loja
-            SET stock = stock - ?,
-                fechaActualizacion = GETDATE()
-            WHERE fkIdTienda = ? AND fkIdProducto = ?
-        """
-        for detalle in detalles:
-            cursor.execute(query_inventario, (
-                detalle['cantidad'],
-                id_tienda,
-                detalle['id_producto']
-            ))
-        
+        for d in detalles:
+            cursor.execute("""
+                UPDATE dbo.Inventario_Loja
+                SET stock = stock - ?,
+                    fechaActualizacion = GETDATE()
+                WHERE fkIdProducto = ? AND fkIdTienda = ?
+            """, (d['cantidad'], d['id_producto'], id_tienda))
+
         conexion.commit()
-        print(f"✓ Venta ID {id_venta} registrada correctamente con {len(detalles)} productos")
-        
         cursor.close()
         cerrar_conexion(conexion)
-        return int(id_venta)
-        
+
+        print(f"✓ Venta {id_venta} registrada correctamente")
+        return id_venta
+
     except pyodbc.Error as e:
         print(f"✗ Error al insertar venta: {e}")
         conexion.rollback()
         cerrar_conexion(conexion)
         return None
 
-
 def obtener_detalle_venta_loja(id_venta):
     """
-    Obtiene los detalles de una venta específica.
+    Obtiene el detalle de una venta específica de Loja.
     
     Args:
         id_venta (int): ID de la venta
@@ -757,7 +572,8 @@ def obtener_detalle_venta_loja(id_venta):
                 dv.fkIdVenta,
                 dv.nLineaId,
                 dv.fkIdProducto,
-                p.nombre as nombre_producto
+                p.nombre as nombre_producto,
+                p.precio_cents
             FROM dbo.DetalleVenta_Loja dv
             LEFT JOIN dbo.Producto_Info p ON dv.fkIdProducto = p.id_producto
             WHERE dv.fkIdVenta = ?
@@ -772,7 +588,8 @@ def obtener_detalle_venta_loja(id_venta):
                 'id_venta': row[0],
                 'linea_id': row[1],
                 'id_producto': row[2],
-                'nombre_producto': row[3] if row[3] else 'N/A'
+                'nombre_producto': row[3] if row[3] else 'N/A',
+                'precio_unitario': row[4] / 100.0 if row[4] else 0.0
             })
         
         cursor.close()
@@ -786,44 +603,101 @@ def obtener_detalle_venta_loja(id_venta):
 
 
 # ============================================================
-# FUNCIÓN DE PRUEBA
+# CONSULTA - INVENTARIO (Solo inventario de Loja)
 # ============================================================
 
-def probar_conexion_loja():
+def obtener_inventario_loja():
     """
-    Prueba la conexión al Nodo Loja y muestra información básica.
-    """
-    print("\n" + "="*60)
-    print("PROBANDO CONEXIÓN AL NODO LOJA")
-    print("="*60 + "\n")
+    Obtiene el inventario de Loja (fkIdTienda = 3).
     
+    El inventario NO se modifica manualmente.
+    Se actualiza automáticamente con las ventas.
+    
+    Returns:
+        list: Lista de diccionarios con el inventario
+    """
     conexion = conectar_loja()
+    if not conexion:
+        return []
     
-    if conexion:
-        print("✓ Conexión exitosa")
+    try:
+        cursor = conexion.cursor()
+        query = """
+            SELECT 
+                i.fkIdTienda,
+                i.fkIdProducto,
+                i.stock,
+                i.fechaActualizacion,
+                p.nombre as nombre_producto,
+                p.stock_minimo
+            FROM dbo.Inventario_Loja i
+            LEFT JOIN dbo.Producto_Info p ON i.fkIdProducto = p.id_producto
+            ORDER BY p.nombre
+        """
+        cursor.execute(query)
+        resultados = cursor.fetchall()
         
-        # Probar consulta simple
-        try:
-            cursor = conexion.cursor()
-            cursor.execute("SELECT COUNT(*) FROM dbo.Cliente")
-            total_clientes = cursor.fetchone()[0]
-            print(f"✓ Total de clientes en base de datos: {total_clientes}")
-            
-            cursor.execute("SELECT COUNT(*) FROM dbo.Producto_Info")
-            total_productos = cursor.fetchone()[0]
-            print(f"✓ Total de productos en base de datos: {total_productos}")
-            
-            cursor.close()
-        except Exception as e:
-            print(f"✗ Error en consulta de prueba: {e}")
+        inventario = []
+        for row in resultados:
+            inventario.append({
+                'id_tienda': row[0],
+                'id_producto': row[1],
+                'stock': row[2],
+                'fecha_actualizacion': str(row[3]) if row[3] else '',
+                'nombre_producto': row[4] if row[4] else 'N/A',
+                'stock_minimo': row[5] if row[5] else 0
+            })
         
+        cursor.close()
         cerrar_conexion(conexion)
-    else:
-        print("✗ No se pudo establecer conexión")
+        return inventario
+        
+    except pyodbc.Error as e:
+        print(f"✗ Error al obtener inventario: {e}")
+        cerrar_conexion(conexion)
+        return []
+
+
+# ============================================================
+# FUNCIONES AUXILIARES
+# ============================================================
+
+def verificar_stock_disponible(id_producto, cantidad_solicitada):
+    """
+    Verifica si hay stock disponible de un producto.
     
-    print("\n" + "="*60 + "\n")
-
-
-if __name__ == '__main__':
-    # Ejecutar prueba de conexión
-    probar_conexion_loja()
+    Args:
+        id_producto (int): ID del producto
+        cantidad_solicitada (int): Cantidad que se desea vender
+        
+    Returns:
+        tuple: (bool, int) - (tiene_stock, stock_actual)
+    """
+    conexion = conectar_loja()
+    if not conexion:
+        return (False, 0)
+    
+    try:
+        cursor = conexion.cursor()
+        query = """
+            SELECT stock
+            FROM dbo.Inventario_Loja
+            WHERE fkIdProducto = ? AND fkIdTienda = 3
+        """
+        cursor.execute(query, (id_producto,))
+        resultado = cursor.fetchone()
+        
+        cursor.close()
+        cerrar_conexion(conexion)
+        
+        if resultado:
+            stock_actual = resultado[0]
+            tiene_stock = stock_actual >= cantidad_solicitada
+            return (tiene_stock, stock_actual)
+        
+        return (False, 0)
+        
+    except pyodbc.Error as e:
+        print(f"✗ Error al verificar stock: {e}")
+        cerrar_conexion(conexion)
+        return (False, 0)
