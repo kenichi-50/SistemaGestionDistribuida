@@ -573,6 +573,177 @@ def insertar_venta_loja(id_cliente, id_empleado, id_tienda, detalles):
     conexion = conectar_loja()
     if not conexion:
         return None
+
+
+def obtener_venta_loja_por_id(id_venta):
+    """
+    Obtiene la cabecera de una venta específica en Loja.
+    """
+    conexion = conectar_loja()
+    if not conexion:
+        return None
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            """
+            SELECT idVenta, fechaVenta, totalCents, fkIdCliente, fkIdEmpleado, fkIdTienda
+            FROM dbo.Venta_Loja WHERE idVenta = ?
+            """,
+            (id_venta,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        cerrar_conexion(conexion)
+        if not row:
+            return None
+        return {
+            'id': row[0],
+            'fecha': str(row[1]) if row[1] else '',
+            'total': row[2] / 100.0 if row[2] else 0.0,
+            'id_cliente': row[3],
+            'id_empleado': row[4],
+            'id_tienda': row[5],
+        }
+    except pyodbc.Error as e:
+        print(f"✗ Error al obtener venta por ID (Loja): {e}")
+        cerrar_conexion(conexion)
+        return None
+
+
+def eliminar_venta_loja(id_venta):
+    """
+    Elimina una venta y revierte el stock en Loja.
+    """
+    conexion = conectar_loja()
+    if not conexion:
+        return False
+    try:
+        cursor = conexion.cursor()
+        # Obtener detalles y tienda
+        cursor.execute(
+            """
+            SELECT dv.fkIdProducto, dv.cantidad, dv.fkIdTienda
+            FROM dbo.DetalleVenta_Loja dv WHERE dv.fkIdVenta = ?
+            """,
+            (id_venta,)
+        )
+        detalles = cursor.fetchall()
+
+        # Revertir inventario
+        for pid, cantidad, id_tienda in detalles:
+            cursor.execute(
+                """
+                UPDATE dbo.Inventario_Loja
+                SET stock = stock + ?, fechaActualizacion = GETDATE()
+                WHERE fkIdTienda = ? AND fkIdProducto = ?
+                """,
+                (cantidad, id_tienda, pid)
+            )
+
+        # Eliminar detalles y cabecera
+        cursor.execute("DELETE FROM dbo.DetalleVenta_Loja WHERE fkIdVenta = ?", (id_venta,))
+        cursor.execute("DELETE FROM dbo.Venta_Loja WHERE idVenta = ?", (id_venta,))
+        conexion.commit()
+        cursor.close()
+        cerrar_conexion(conexion)
+        return True
+    except pyodbc.Error as e:
+        print(f"✗ Error al eliminar venta (Loja): {e}")
+        conexion.rollback()
+        cerrar_conexion(conexion)
+        return False
+
+
+def actualizar_venta_loja(id_venta, id_cliente, id_empleado, detalles):
+    """
+    Actualiza cabecera y detalles de una venta en Loja, ajustando inventario.
+    Mantiene la tienda original.
+    """
+    conexion = conectar_loja()
+    if not conexion:
+        return False
+    try:
+        cursor = conexion.cursor()
+        # Obtener cabecera actual (incluye tienda)
+        cursor.execute(
+            "SELECT fkIdTienda FROM dbo.Venta_Loja WHERE idVenta = ?",
+            (id_venta,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise pyodbc.Error("Venta no encontrada")
+        id_tienda = int(row[0])
+
+        # Obtener detalles actuales para revertir inventario
+        cursor.execute(
+            """
+            SELECT fkIdProducto, cantidad FROM dbo.DetalleVenta_Loja
+            WHERE fkIdVenta = ?
+            """,
+            (id_venta,)
+        )
+        actuales = cursor.fetchall()
+        for pid, cantidad in actuales:
+            cursor.execute(
+                """
+                UPDATE dbo.Inventario_Loja
+                SET stock = stock + ?, fechaActualizacion = GETDATE()
+                WHERE fkIdTienda = ? AND fkIdProducto = ?
+                """,
+                (cantidad, id_tienda, pid)
+            )
+
+        # Eliminar detalles actuales
+        cursor.execute("DELETE FROM dbo.DetalleVenta_Loja WHERE fkIdVenta = ?", (id_venta,))
+
+        # Insertar nuevos detalles (con guardas de stock)
+        total_cents = sum(int(d['precio_unitario'] * 100) * d['cantidad'] for d in detalles)
+        for idx, detalle in enumerate(detalles, start=1):
+            cursor.execute(
+                """
+                UPDATE dbo.Inventario_Loja
+                SET stock = stock - ?, fechaActualizacion = GETDATE()
+                WHERE fkIdTienda = ? AND fkIdProducto = ? AND stock >= ?
+                """,
+                (detalle['cantidad'], id_tienda, detalle['id_producto'], detalle['cantidad'])
+            )
+            if cursor.rowcount == 0:
+                raise pyodbc.Error("Stock insuficiente al actualizar venta")
+            cursor.execute(
+                """
+                INSERT INTO dbo.DetalleVenta_Loja (
+                    fkIdVenta, nLineald, fkIdProducto, cantidad, precioUnitCents, fkIdTienda
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    id_venta,
+                    idx,
+                    detalle['id_producto'],
+                    detalle['cantidad'],
+                    int(detalle['precio_unitario'] * 100),
+                    id_tienda,
+                )
+            )
+
+        # Actualizar cabecera
+        cursor.execute(
+            """
+            UPDATE dbo.Venta_Loja
+            SET fkIdCliente = ?, fkIdEmpleado = ?, totalCents = ?, fechaVenta = fechaVenta
+            WHERE idVenta = ?
+            """,
+            (id_cliente, id_empleado, total_cents, id_venta)
+        )
+
+        conexion.commit()
+        cursor.close()
+        cerrar_conexion(conexion)
+        return True
+    except pyodbc.Error as e:
+        print(f"✗ Error al actualizar venta (Loja): {e}")
+        conexion.rollback()
+        cerrar_conexion(conexion)
+        return False
     
     try:
         cursor = conexion.cursor()
@@ -645,7 +816,7 @@ def insertar_venta_loja(id_cliente, id_empleado, id_tienda, detalles):
         print(f"✗ Error al insertar venta: {e}")
         conexion.rollback()
         cerrar_conexion(conexion)
-        return None
+        raise
 
 def obtener_detalle_venta_loja(id_venta):
     """
@@ -669,7 +840,8 @@ def obtener_detalle_venta_loja(id_venta):
                 dv.nLineald,
                 dv.fkIdProducto,
                 p.nombre as nombre_producto,
-                p.precio_cents
+                dv.precioUnitCents,
+                dv.cantidad
             FROM dbo.DetalleVenta_Loja dv
             LEFT JOIN dbo.Producto_Info p ON dv.fkIdProducto = p.id_producto
             WHERE dv.fkIdVenta = ?
@@ -685,7 +857,9 @@ def obtener_detalle_venta_loja(id_venta):
                 'linea_id': row[1],
                 'id_producto': row[2],
                 'nombre_producto': row[3] if row[3] else 'N/A',
-                'precio_unitario': row[4] / 100.0 if row[4] else 0.0
+                'precio_unit_cents': row[4] if row[4] is not None else 0,
+                'cantidad': row[5] if row[5] is not None else 1,
+                'precio_unitario': (row[4] or 0) / 100.0
             })
         
         cursor.close()

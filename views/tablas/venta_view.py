@@ -12,9 +12,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QHeaderView, QMessageBox)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from database.consultas_quito import obtener_ventas_quito
-from database.consultas_loja import obtener_ventas_loja
-from views.formularios.venta_form import VentaForm
+from database.consultas_quito import obtener_ventas_quito, eliminar_venta_quito
+from database.consultas_loja import obtener_ventas_loja, eliminar_venta_loja
+from views.formularios.venta_form import VentaForm, EditVentaForm
 
 
 class VentaView(QWidget):
@@ -44,16 +44,24 @@ class VentaView(QWidget):
         buttons = QHBoxLayout()
         self.btn_nueva = QPushButton("+ Nueva Venta")
         self.btn_ver_detalle = QPushButton("Ver Detalle")
+        self.btn_editar = QPushButton("Editar Venta")
+        self.btn_eliminar = QPushButton("Eliminar Venta")
         self.btn_actualizar = QPushButton("🔄 Actualizar")
         
         self.btn_ver_detalle.setEnabled(False)
+        self.btn_editar.setEnabled(False)
+        self.btn_eliminar.setEnabled(False)
         
         self.btn_nueva.clicked.connect(self.nueva_venta)
         self.btn_ver_detalle.clicked.connect(self.ver_detalle)
+        self.btn_editar.clicked.connect(self.editar_venta)
+        self.btn_eliminar.clicked.connect(self.eliminar_venta)
         self.btn_actualizar.clicked.connect(self.cargar_datos)
         
         buttons.addWidget(self.btn_nueva)
         buttons.addWidget(self.btn_ver_detalle)
+        buttons.addWidget(self.btn_editar)
+        buttons.addWidget(self.btn_eliminar)
         buttons.addStretch()
         buttons.addWidget(self.btn_actualizar)
         layout.addLayout(buttons)
@@ -94,7 +102,10 @@ class VentaView(QWidget):
         self.info_label.setText(f"Mostrando {len(datos)} registros")
         
     def on_selection_changed(self):
-        self.btn_ver_detalle.setEnabled(len(self.tabla.selectedItems()) > 0)
+        has_sel = len(self.tabla.selectedItems()) > 0
+        self.btn_ver_detalle.setEnabled(has_sel)
+        self.btn_editar.setEnabled(has_sel)
+        self.btn_eliminar.setEnabled(has_sel)
         
     def nueva_venta(self):
         form = VentaForm(self.datos_usuario)
@@ -106,8 +117,41 @@ class VentaView(QWidget):
         if row < 0:
             return
         id_venta = int(self.tabla.item(row, 0).text())
-        
+        fecha = self.tabla.item(row, 1).text()
+        cliente = self.tabla.item(row, 2).text()
+        total = self.tabla.item(row, 3).text()
+
         # Importar aquí para evitar circular
         from views.tablas.detalle_venta_view import DetalleVentaDialog
-        dialog = DetalleVentaDialog(self.datos_usuario, id_venta)
+        dialog = DetalleVentaDialog(self.datos_usuario, id_venta, fecha, cliente, total)
         dialog.exec_()
+
+    def editar_venta(self):
+        row = self.tabla.currentRow()
+        if row < 0:
+            return
+        id_venta = int(self.tabla.item(row, 0).text())
+        form = EditVentaForm(self.datos_usuario, id_venta)
+        if form.exec_():
+            self.cargar_datos()
+
+    def eliminar_venta(self):
+        row = self.tabla.currentRow()
+        if row < 0:
+            return
+        id_venta = int(self.tabla.item(row, 0).text())
+        resp = QMessageBox.question(
+            self,
+            "Confirmar eliminación",
+            f"¿Eliminar la venta #{id_venta}? Esto revertirá el stock.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if resp != QMessageBox.Yes:
+            return
+        ok = eliminar_venta_quito(id_venta) if self.nodo == 'gestion' else eliminar_venta_loja(id_venta)
+        if ok:
+            QMessageBox.information(self, "Éxito", f"Venta #{id_venta} eliminada")
+            self.cargar_datos()
+        else:
+            QMessageBox.critical(self, "Error", "No se pudo eliminar la venta")

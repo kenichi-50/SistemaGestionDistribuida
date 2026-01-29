@@ -516,9 +516,9 @@ class DetalleVentaDialog(QDialog):
             precio_item.setFont(QFont("Segoe UI", 10, QFont.Bold))
             self.tabla.setItem(row, 3, precio_item)
             
-            # Cantidad (nota: en tu BD actual no guardas cantidad, solo nLineaId)
-            # Si quieres mostrar cantidad, deberías agregarla a la tabla DetalleVenta
-            cantidad_item = QTableWidgetItem("1")  # Por defecto 1
+            # Cantidad
+            cantidad_val = detalle.get('cantidad', 1)
+            cantidad_item = QTableWidgetItem(str(cantidad_val))
             cantidad_item.setTextAlignment(Qt.AlignCenter)
             self.tabla.setItem(row, 4, cantidad_item)
         

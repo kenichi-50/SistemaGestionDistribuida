@@ -13,13 +13,19 @@ from database.consultas_quito import (
     obtener_clientes_quito,
     obtener_productos_quito_por_tienda,
     obtener_empleados_quito_por_tienda,
-    insertar_venta_quito
+    insertar_venta_quito,
+    obtener_venta_quito_por_id,
+    actualizar_venta_quito,
+    obtener_detalle_venta_quito
 )
 from database.consultas_loja import (
     obtener_clientes_loja,
     obtener_productos_loja_por_tienda,
     obtener_empleados_loja_por_tienda,
-    insertar_venta_loja
+    insertar_venta_loja,
+    obtener_venta_loja_por_id,
+    actualizar_venta_loja,
+    obtener_detalle_venta_loja
 )
 
 
@@ -212,6 +218,12 @@ class VentaForm(QDialog):
             self.btn_agregar.setEnabled(True)
 
     def guardar(self):
+        if self.combo_cliente.count() == 0:
+            QMessageBox.warning(self, "Error", "No hay clientes disponibles. Registre un cliente primero.")
+            return
+        if self.combo_empleado.count() == 0:
+            QMessageBox.warning(self, "Error", "No hay empleados en la sucursal seleccionada.")
+            return
         if not self.detalles:
             QMessageBox.warning(self, "Error", "Debe agregar al menos un producto")
             return
@@ -229,13 +241,94 @@ class VentaForm(QDialog):
         id_empleado = self.combo_empleado.currentData()
         id_tienda = 1 if self.nodo == 'gestion' else 3
 
-        if self.nodo == 'gestion':
-            id_venta = insertar_venta_quito(id_cliente, id_empleado, id_tienda, self.detalles)
-        else:
-            id_venta = insertar_venta_loja(id_cliente, id_empleado, id_tienda, self.detalles)
+        try:
+            if self.nodo == 'gestion':
+                id_venta = insertar_venta_quito(id_cliente, id_empleado, id_tienda, self.detalles)
+            else:
+                id_venta = insertar_venta_loja(id_cliente, id_empleado, id_tienda, self.detalles)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al registrar la venta:\n{str(e)}")
+            return
 
         if id_venta:
             QMessageBox.information(self, "Éxito", f"Venta #{id_venta} registrada correctamente")
             self.accept()
         else:
-            QMessageBox.critical(self, "Error", "No se pudo registrar la venta")
+            QMessageBox.critical(self, "Error", "No se pudo registrar la venta. Verifique stock disponible, cliente y empleado válidos.")
+
+
+class EditVentaForm(VentaForm):
+    def __init__(self, datos_usuario, id_venta):
+        self.id_venta = id_venta
+        super().__init__(datos_usuario)
+
+    def init_ui(self):
+        super().init_ui()
+        self.setWindowTitle("Editar Venta")
+        # Cambiar texto del botón guardar
+        # Buscar el botón en el layout final
+        # Asumimos que el último layout tiene dos botones, reemplazamos conexión
+        # Nota: mantenemos estilo original
+        # Reasignar handler de guardar
+        # No cambiamos el texto para evitar buscar el widget; manejamos por acción
+
+        # Prefill datos
+        self._prefill_datos()
+
+    def _prefill_datos(self):
+        # Obtener cabecera y detalles
+        if self.nodo == 'gestion':
+            venta = obtener_venta_quito_por_id(self.id_venta)
+            detalles = obtener_detalle_venta_quito(self.id_venta)
+        else:
+            venta = obtener_venta_loja_por_id(self.id_venta)
+            detalles = obtener_detalle_venta_loja(self.id_venta)
+        if not venta:
+            QMessageBox.critical(self, "Error", "No se pudo cargar la venta")
+            return
+        # Seleccionar cliente
+        idx_cliente = self.combo_cliente.findData(venta['id_cliente'])
+        if idx_cliente >= 0:
+            self.combo_cliente.setCurrentIndex(idx_cliente)
+        # Seleccionar empleado
+        idx_empleado = self.combo_empleado.findData(venta['id_empleado'])
+        if idx_empleado >= 0:
+            self.combo_empleado.setCurrentIndex(idx_empleado)
+        # Construir detalles
+        self.detalles = []
+        for d in detalles:
+            self.detalles.append({
+                'id_producto': d['id_producto'],
+                'nombre': d['nombre_producto'],
+                'cantidad': d.get('cantidad', 1),
+                'precio_unitario': d.get('precio_unitario', 0.0)
+            })
+        self.actualizar_tabla()
+
+    def guardar(self):
+        if not self.detalles:
+            QMessageBox.warning(self, "Error", "Debe agregar al menos un producto")
+            return
+        # Validación de stock igual que en alta
+        totales = {}
+        for d in self.detalles:
+            totales[d['id_producto']] = totales.get(d['id_producto'], 0) + d['cantidad']
+        for pid, total in totales.items():
+            stock = self.productos_dict.get(pid, {}).get('stock')
+            if stock is not None and total > stock:
+                QMessageBox.critical(self, "Stock insuficiente", "La cantidad agregada excede el stock disponible en sucursal.")
+                return
+
+        id_cliente = self.combo_cliente.currentData()
+        id_empleado = self.combo_empleado.currentData()
+
+        if self.nodo == 'gestion':
+            ok = actualizar_venta_quito(self.id_venta, id_cliente, id_empleado, self.detalles)
+        else:
+            ok = actualizar_venta_loja(self.id_venta, id_cliente, id_empleado, self.detalles)
+
+        if ok:
+            QMessageBox.information(self, "Éxito", f"Venta #{self.id_venta} actualizada correctamente")
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Error", "No se pudo actualizar la venta")
