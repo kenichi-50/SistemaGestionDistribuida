@@ -187,7 +187,7 @@ def obtener_productos_quito():
                 'marca': f[2] or '',
                 'modelo': f[3] or '',
                 'categoria': f[4] or '',
-                'precio': f[5] / 100,
+                'precio': (f[5] or 0) / 100,
                 'stock_minimo': f[6],
                 'costo_logistico': f[7],
                 'margen_porcentaje': f[8],
@@ -202,6 +202,54 @@ def obtener_productos_quito():
         print("✗ Error al obtener productos (Quito):", e)
         cerrar_conexion(conexion)
         return []
+
+
+def obtener_productos_quito_por_tienda(id_tienda):
+    """
+    Retorna solo productos disponibles en la sucursal indicada (Inventario_Quito).
+    Incluye precio desde Vista_Detalle_Producto.
+    """
+    conexion = conectar_quito()
+    if not conexion:
+        return []
+
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            """
+            SELECT 
+                v.id_producto,
+                v.nombre,
+                v.precio_cents,
+                i.stock
+            FROM dbo.Vista_Detalle_Producto v
+            INNER JOIN dbo.Inventario_Quito i 
+                ON i.fkIdProducto = v.id_producto
+            WHERE i.fkIdTienda = ?
+            ORDER BY v.id_producto
+            """,
+            (id_tienda,)
+        )
+
+        productos = []
+        for f in cursor.fetchall():
+            productos.append({
+                'id': f[0],
+                'nombre': f[1],
+                'precio': (f[2] or 0) / 100,
+                'stock': f[3]
+            })
+
+        cursor.close()
+        cerrar_conexion(conexion)
+        return productos
+
+    except Exception as e:
+        print("✗ Error al obtener productos por tienda (Quito):", e)
+        cerrar_conexion(conexion)
+        return []
+
+    
 
 
 
@@ -502,6 +550,54 @@ def obtener_empleados_quito():
     conexion = conectar_quito()
     if not conexion:
         return []
+
+
+def obtener_empleados_quito_por_tienda(id_tienda):
+    """
+    Obtiene los empleados de Quito filtrados por sucursal (fkIdTienda).
+    """
+    conexion = conectar_quito()
+    if not conexion:
+        return []
+
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            """
+            SELECT 
+                e.idEmpleado,
+                e.nombre,
+                e.telefono,
+                e.cargo,
+                e.fechaContratacion,
+                e.fkIdTienda
+            FROM dbo.Vista_Empleados_Global e
+            WHERE e.fkIdTienda = ?
+            ORDER BY e.nombre
+            """,
+            (id_tienda,)
+        )
+        resultados = cursor.fetchall()
+
+        empleados = []
+        for row in resultados:
+            empleados.append({
+                'id': row[0],
+                'nombre': row[1],
+                'telefono': row[2] if row[2] else '',
+                'cargo': row[3] if row[3] else '',
+                'fecha_contratacion': str(row[4]) if row[4] else '',
+                'id_tienda': row[5]
+            })
+
+        cursor.close()
+        cerrar_conexion(conexion)
+        return empleados
+
+    except pyodbc.Error as e:
+        print(f"✗ Error al obtener empleados por tienda: {e}")
+        cerrar_conexion(conexion)
+        return []
     
     try:
         cursor = conexion.cursor()
@@ -710,22 +806,40 @@ def insertar_venta_quito(id_cliente, id_empleado, id_tienda, detalles):
         # Calcular total
         total_cents = sum(int(d['precio_unitario'] * 100) * d['cantidad'] for d in detalles)
         
-        # Insertar venta
+        # Insertar venta (incluye fechaVenta NOT NULL) y devolver id generado
+        # Usamos OUTPUT INSERTED.idVenta para que el propio INSERT retorne el ID
         query_venta = """
-            INSERT INTO dbo.Venta_Quito (totalCents, fkIdCliente, fkIdEmpleado, fkIdTienda)
-            VALUES (?, ?, ?, ?);
-            SELECT SCOPE_IDENTITY();
+            INSERT INTO dbo.Venta_Quito (fechaVenta, totalCents, fkIdCliente, fkIdEmpleado, fkIdTienda)
+            OUTPUT INSERTED.idVenta
+            VALUES (CONVERT(date, GETDATE()), ?, ?, ?, ?)
         """
         cursor.execute(query_venta, (total_cents, id_cliente, id_empleado, id_tienda))
-        id_venta = cursor.fetchone()[0]
+        id_venta = int(cursor.fetchone()[0])
         
         # Insertar detalles
         query_detalle = """
-            INSERT INTO dbo.DetalleVenta_Quito (fkIdVenta, nLineaId, fkIdProducto)
-            VALUES (?, ?, ?)
+            INSERT INTO dbo.DetalleVenta_Quito (
+                fkIdVenta,
+                nLineald,
+                fkIdProducto,
+                cantidad,
+                precioUnitCents,
+                fkIdTienda
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
         """
         for idx, detalle in enumerate(detalles, start=1):
-            cursor.execute(query_detalle, (int(id_venta), idx, detalle['id_producto']))
+            cursor.execute(
+                query_detalle,
+                (
+                    int(id_venta),
+                    idx,
+                    detalle['id_producto'],
+                    detalle['cantidad'],
+                    int(detalle['precio_unitario'] * 100),
+                    id_tienda
+                )
+            )
         
         # Actualizar inventario
         query_inventario = """
@@ -735,11 +849,23 @@ def insertar_venta_quito(id_cliente, id_empleado, id_tienda, detalles):
             WHERE fkIdTienda = ? AND fkIdProducto = ?
         """
         for detalle in detalles:
-            cursor.execute(query_inventario, (
-                detalle['cantidad'],
-                id_tienda,
-                detalle['id_producto']
-            ))
+            # Guardar stock en DB sin permitir negativos (concurrencia segura)
+            cursor.execute(
+                """
+                UPDATE dbo.Inventario_Quito
+                SET stock = stock - ?,
+                    fechaActualizacion = GETDATE()
+                WHERE fkIdTienda = ? AND fkIdProducto = ? AND stock >= ?
+                """,
+                (
+                    detalle['cantidad'],
+                    id_tienda,
+                    detalle['id_producto'],
+                    detalle['cantidad']
+                )
+            )
+            if cursor.rowcount == 0:
+                raise pyodbc.Error("Stock insuficiente para producto en sucursal")
         
         conexion.commit()
         print(f"✓ Venta ID {id_venta} registrada correctamente")
@@ -768,13 +894,13 @@ def obtener_detalle_venta_quito(id_venta):
         query = """
             SELECT 
                 dv.fkIdVenta,
-                dv.nLineaId,
+                dv.nLineald,
                 dv.fkIdProducto,
                 p.nombre as nombre_producto
             FROM dbo.DetalleVenta_Quito dv
             LEFT JOIN dbo.Producto_Info p ON dv.fkIdProducto = p.id_producto
             WHERE dv.fkIdVenta = ?
-            ORDER BY dv.nLineaId
+            ORDER BY dv.nLineald
         """
         cursor.execute(query, (id_venta,))
         resultados = cursor.fetchall()
@@ -848,3 +974,32 @@ def obtener_inventario_quito():
         print(f"✗ Error al obtener inventario: {e}")
         cerrar_conexion(conexion)
         return []
+
+
+# ============================================================
+# DEBUG - Esquema DetalleVenta_Quito
+# ============================================================
+
+def debug_detalle_columns_quito():
+    """
+    Imprime las columnas de la tabla DetalleVenta_Quito para verificar nombres.
+    """
+    conexion = conectar_quito()
+    if not conexion:
+        print("✗ No se pudo conectar a Quito")
+        return
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'DetalleVenta_Quito'
+            ORDER BY ORDINAL_POSITION
+        """)
+        cols = [row[0] for row in cursor.fetchall()]
+        print("✓ Columnas DetalleVenta_Quito:", ", ".join(cols))
+        cursor.close()
+        cerrar_conexion(conexion)
+    except pyodbc.Error as e:
+        print(f"✗ Error al consultar columnas de DetalleVenta_Quito: {e}")
+        cerrar_conexion(conexion)

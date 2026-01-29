@@ -13,13 +13,39 @@ Fecha: Enero 2026
 
 import pyodbc
 
+def seleccionar_driver_sql_server():
+    """
+    Selecciona automáticamente el mejor driver ODBC disponible (18 > 17).
+    Si ninguno está disponible, devuelve None.
+
+    Returns:
+        str | None: Nombre del driver ODBC de SQL Server.
+    """
+    try:
+        drivers = [d.strip() for d in pyodbc.drivers()]
+    except Exception:
+        drivers = []
+
+    preferidos = [
+        'ODBC Driver 18 for SQL Server',
+        'ODBC Driver 17 for SQL Server',
+    ]
+
+    for nombre in preferidos:
+        if nombre in drivers:
+            return nombre
+    return None
+
+SQL_DRIVER = seleccionar_driver_sql_server()
+if not SQL_DRIVER:
+    print("✗ No se encontró 'ODBC Driver 17/18 for SQL Server'. Instálalo para continuar.")
 
 # ============================================================
 # CONFIGURACIÓN DE CONEXIONES
 # ============================================================
 
 CONFIG_QUITO = {
-    'driver': 'ODBC Driver 18 for SQL Server',
+    'driver': 'ODBC Driver 17 for SQL Server',
     'server': 'HARRYPC',
     'database': 'NexusTech_QuitoCentral',
     'username': 'sa',
@@ -50,7 +76,7 @@ def conectar_quito():
     """
     try:
         conexion = pyodbc.connect(
-            f"DRIVER={{{CONFIG_QUITO['driver']}}};"
+            f"DRIVER={{{SQL_DRIVER or CONFIG_QUITO['driver']}}};"
             f"SERVER={CONFIG_QUITO['server']};"
             f"DATABASE={CONFIG_QUITO['database']};"
             f"UID={CONFIG_QUITO['username']};"
@@ -73,7 +99,7 @@ def conectar_loja():
     """
     try:
         conexion = pyodbc.connect(
-            f"DRIVER={{{CONFIG_LOJA['driver']}}};"
+            f"DRIVER={{{SQL_DRIVER or CONFIG_LOJA['driver']}}};"
             f"SERVER={CONFIG_LOJA['server']};"
             f"DATABASE={CONFIG_LOJA['database']};"
             f"UID={CONFIG_LOJA['username']};"
