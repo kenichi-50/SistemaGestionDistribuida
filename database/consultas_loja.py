@@ -46,7 +46,7 @@ def obtener_clientes_loja():
                 telefono,
                 correo,
                 fechaRegistro,
-                rowguid
+                rowguid8
             FROM dbo.Cliente
             ORDER BY nombre
         """
@@ -62,7 +62,7 @@ def obtener_clientes_loja():
                 'telefono': row[3] if row[3] else '',
                 'correo': row[4] if row[4] else '',
                 'fecha_registro': str(row[5]) if row[5] else '',
-                'rowguid': str(row[6]) if row[6] else ''
+                'rowguid8': str(row[6]) if row[6] else ''
             })
         
         cursor.close()
@@ -95,8 +95,11 @@ def insertar_cliente_loja(nombre, direccion, telefono, correo):
     try:
         cursor = conexion.cursor()
         query = """
-            INSERT INTO dbo.Cliente (nombre, direccion, telefono, correo)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO dbo.Cliente (
+                nombre, direccion, telefono, correo,
+                fechaRegistro, rowguid8
+            )
+            VALUES (?, ?, ?, ?, CONVERT(date, GETDATE()), NEWID())
         """
         cursor.execute(query, (nombre, direccion, telefono, correo))
         conexion.commit()
@@ -201,6 +204,44 @@ def obtener_productos_loja():
     """
     conexion = conectar_loja()
     if not conexion:
+        return []
+
+    try:
+        cursor = conexion.cursor()
+        query = """
+            SELECT 
+                p.id_producto,
+                p.nombre,
+                p.marca,
+                p.modelo,
+                p.categoria,
+                p.precio_cents,
+                p.stock_minimo
+            FROM dbo.Producto_Info p
+            ORDER BY p.nombre
+        """
+        cursor.execute(query)
+        resultados = cursor.fetchall()
+
+        productos = []
+        for row in resultados:
+            productos.append({
+                'id': row[0],
+                'nombre': row[1],
+                'marca': row[2] if row[2] else '',
+                'modelo': row[3] if row[3] else '',
+                'categoria': row[4] if row[4] else '',
+                'precio': row[5] / 100.0 if row[5] else 0.0,
+                'stock_minimo': row[6] if row[6] else 0
+            })
+
+        cursor.close()
+        cerrar_conexion(conexion)
+        return productos
+
+    except pyodbc.Error as e:
+        print(f"✗ Error al obtener productos: {e}")
+        cerrar_conexion(conexion)
         return []
 
 

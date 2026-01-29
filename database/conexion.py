@@ -220,7 +220,7 @@ def obtener_clientes_loja():
                 telefono,
                 correo,
                 fechaRegistro,
-                rowguid
+                rowguid8
             FROM dbo.Cliente
             ORDER BY nombre
         """
@@ -236,7 +236,7 @@ def obtener_clientes_loja():
                 'telefono': row[3],
                 'correo': row[4],
                 'fecha_registro': str(row[5]) if row[5] else '',
-                'rowguid': str(row[6]) if row[6] else ''
+                'rowguid8': str(row[6]) if row[6] else ''
             })
         
         cursor.close()
@@ -269,8 +269,11 @@ def insertar_cliente_loja(nombre, direccion, telefono, correo):
     try:
         cursor = conexion.cursor()
         query = """
-            INSERT INTO dbo.Cliente (nombre, direccion, telefono, correo)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO dbo.Cliente (
+                nombre, direccion, telefono, correo,
+                fechaRegistro, rowguid8
+            )
+            VALUES (?, ?, ?, ?, CONVERT(date, GETDATE()), NEWID())
         """
         cursor.execute(query, (nombre, direccion, telefono, correo))
         conexion.commit()
