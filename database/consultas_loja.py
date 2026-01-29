@@ -202,6 +202,47 @@ def obtener_productos_loja():
     conexion = conectar_loja()
     if not conexion:
         return []
+
+
+def obtener_productos_loja_por_tienda(id_tienda=3):
+    """
+    Retorna productos disponibles en la sucursal de Loja indicada, con stock.
+    """
+    conexion = conectar_loja()
+    if not conexion:
+        return []
+
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            """
+            SELECT 
+                p.id_producto,
+                p.nombre,
+                p.precio_cents,
+                i.stock
+            FROM dbo.Inventario_Loja i
+            INNER JOIN dbo.Producto_Info p ON p.id_producto = i.fkIdProducto
+            WHERE i.fkIdTienda = ?
+            ORDER BY p.nombre
+            """,
+            (id_tienda,)
+        )
+        productos = []
+        for row in cursor.fetchall():
+            productos.append({
+                'id': row[0],
+                'nombre': row[1],
+                'precio': (row[2] or 0) / 100.0,
+                'stock': row[3] or 0
+            })
+        cursor.close()
+        cerrar_conexion(conexion)
+        return productos
+    except pyodbc.Error as e:
+        print(f"✗ Error al obtener productos por tienda (Loja): {e}")
+        cerrar_conexion(conexion)
+        return []
     
     try:
         cursor = conexion.cursor()
@@ -255,6 +296,53 @@ def obtener_empleados_loja():
     """
     conexion = conectar_loja()
     if not conexion:
+        return []
+
+
+def obtener_empleados_loja_por_tienda(id_tienda=3):
+    """
+    Obtiene empleados de Loja filtrados por sucursal.
+    """
+    conexion = conectar_loja()
+    if not conexion:
+        return []
+
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            """
+            SELECT 
+                e.idEmpleado,
+                e.nombre,
+                e.telefono,
+                e.cargo,
+                e.fechaContratacion,
+                e.fkIdTienda
+            FROM dbo.Vista_Empleados_Global e
+            WHERE e.fkIdTienda = ?
+            ORDER BY e.nombre
+            """,
+            (id_tienda,)
+        )
+        resultados = cursor.fetchall()
+
+        empleados = []
+        for row in resultados:
+            empleados.append({
+                'id': row[0],
+                'nombre': row[1],
+                'telefono': row[2] if row[2] else '',
+                'cargo': row[3] if row[3] else '',
+                'fecha_contratacion': str(row[4]) if row[4] else '',
+                'id_tienda': row[5]
+            })
+
+        cursor.close()
+        cerrar_conexion(conexion)
+        return empleados
+    except pyodbc.Error as e:
+        print(f"✗ Error al obtener empleados por tienda (Loja): {e}")
+        cerrar_conexion(conexion)
         return []
     
     try:
@@ -492,15 +580,17 @@ def insertar_venta_loja(id_cliente, id_empleado, id_tienda, detalles):
         # Calcular total en centavos
         total_cents = sum(int(d['precio_unitario'] * 100) * d['cantidad'] for d in detalles)
         
-        # 1. Insertar cabecera de venta
-        cursor.execute("""
-            INSERT INTO dbo.Venta_Loja (totalCents, fkIdCliente, fkIdEmpleado, fkIdTienda)
-            VALUES (?, ?, ?, ?);
-            SELECT SCOPE_IDENTITY();
-        """, (total_cents, id_cliente, id_empleado, id_tienda))
+        # 1. Insertar cabecera de venta (incluye fechaVenta) y obtener id
+        cursor.execute(
+            """
+            INSERT INTO dbo.Venta_Loja (fechaVenta, totalCents, fkIdCliente, fkIdEmpleado, fkIdTienda)
+            OUTPUT INSERTED.idVenta
+            VALUES (CONVERT(date, GETDATE()), ?, ?, ?, ?)
+            """,
+            (total_cents, id_cliente, id_empleado, id_tienda)
+        )
 
-
-        id_venta = cursor.fetchone()[0]
+        id_venta = int(cursor.fetchone()[0])
         
         cursor.execute("SET XACT_ABORT ON")
 
@@ -508,7 +598,7 @@ def insertar_venta_loja(id_cliente, id_empleado, id_tienda, detalles):
         query_detalle = """
             INSERT INTO dbo.DetalleVenta_Loja (
                 fkIdVenta,
-                nLineaId,
+                nLineald,
                 fkIdProducto,
                 cantidad,
                 precioUnitCents,
@@ -531,12 +621,18 @@ def insertar_venta_loja(id_cliente, id_empleado, id_tienda, detalles):
 
         # 3. Actualizar inventario (restar stock)
         for d in detalles:
-            cursor.execute("""
+            # Prevenir stock negativo en DB
+            cursor.execute(
+                """
                 UPDATE dbo.Inventario_Loja
                 SET stock = stock - ?,
                     fechaActualizacion = GETDATE()
-                WHERE fkIdProducto = ? AND fkIdTienda = ?
-            """, (d['cantidad'], d['id_producto'], id_tienda))
+                WHERE fkIdProducto = ? AND fkIdTienda = ? AND stock >= ?
+                """,
+                (d['cantidad'], d['id_producto'], id_tienda, d['cantidad'])
+            )
+            if cursor.rowcount == 0:
+                raise pyodbc.Error("Stock insuficiente para producto en sucursal (Loja)")
 
         conexion.commit()
         cursor.close()
@@ -570,14 +666,14 @@ def obtener_detalle_venta_loja(id_venta):
         query = """
             SELECT 
                 dv.fkIdVenta,
-                dv.nLineaId,
+                dv.nLineald,
                 dv.fkIdProducto,
                 p.nombre as nombre_producto,
                 p.precio_cents
             FROM dbo.DetalleVenta_Loja dv
             LEFT JOIN dbo.Producto_Info p ON dv.fkIdProducto = p.id_producto
             WHERE dv.fkIdVenta = ?
-            ORDER BY dv.nLineaId
+            ORDER BY dv.nLineald
         """
         cursor.execute(query, (id_venta,))
         resultados = cursor.fetchall()

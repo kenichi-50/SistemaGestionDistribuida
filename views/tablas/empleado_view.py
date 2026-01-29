@@ -11,8 +11,16 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QHeaderView, QMessageBox)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from database.consultas_quito import (obtener_empleados_quito, eliminar_empleado_quito)
-from database.consultas_loja import (obtener_empleados_loja, eliminar_empleado_loja)
+from database.consultas_quito import (
+    obtener_empleados_quito,
+    obtener_empleados_quito_por_tienda,
+    eliminar_empleado_quito,
+)
+from database.consultas_loja import (
+    obtener_empleados_loja,
+    obtener_empleados_loja_por_tienda,
+    eliminar_empleado_loja,
+)
 from views.formularios.empleado_form import EmpleadoForm
 
 
@@ -84,9 +92,11 @@ class EmpleadoView(QWidget):
         
     def cargar_datos(self):
         if self.nodo == 'gestion':
-            empleados = obtener_empleados_quito()
+            # Mostrar solo empleados de la sucursal activa (Quito). Usamos tienda 1 por ahora.
+            empleados = obtener_empleados_quito_por_tienda(1)
         else:
-            empleados = obtener_empleados_loja()
+            # Loja: solo empleados de la sucursal 3
+            empleados = obtener_empleados_loja_por_tienda(3)
         
         # Ordenar por ID
         empleados_ordenados = sorted(empleados, key=lambda x: x['id'])

@@ -542,13 +542,46 @@ def eliminar_cliente_quito(id_cliente):
 
 def obtener_empleados_quito():
     """
-    Obtiene los empleados de Quito (fkIdTienda = 1 o 2).
-    
-    Returns:
-        list: Lista de diccionarios con datos de empleados
+    Obtiene todos los empleados de Quito (todas las sucursales de Quito).
     """
     conexion = conectar_quito()
     if not conexion:
+        return []
+
+    try:
+        cursor = conexion.cursor()
+        query = """
+            SELECT 
+                e.idEmpleado,
+                e.nombre,
+                e.telefono,
+                e.cargo,
+                e.fechaContratacion,
+                e.fkIdTienda
+            FROM dbo.Vista_Empleados_Global e
+            ORDER BY e.nombre
+        """
+        cursor.execute(query)
+        resultados = cursor.fetchall()
+
+        empleados = []
+        for row in resultados:
+            empleados.append({
+                'id': row[0],
+                'nombre': row[1],
+                'telefono': row[2] if row[2] else '',
+                'cargo': row[3] if row[3] else '',
+                'fecha_contratacion': str(row[4]) if row[4] else '',
+                'id_tienda': row[5]
+            })
+
+        cursor.close()
+        cerrar_conexion(conexion)
+        return empleados
+
+    except pyodbc.Error as e:
+        print(f"✗ Error al obtener empleados: {e}")
+        cerrar_conexion(conexion)
         return []
 
 
@@ -596,42 +629,6 @@ def obtener_empleados_quito_por_tienda(id_tienda):
 
     except pyodbc.Error as e:
         print(f"✗ Error al obtener empleados por tienda: {e}")
-        cerrar_conexion(conexion)
-        return []
-    
-    try:
-        cursor = conexion.cursor()
-        query = """
-            SELECT 
-                e.idEmpleado,
-                e.nombre,
-                e.telefono,
-                e.cargo,
-                e.fechaContratacion,
-                e.fkIdTienda
-            FROM dbo.Vista_Empleados_Global e
-            ORDER BY e.nombre
-        """
-        cursor.execute(query)
-        resultados = cursor.fetchall()
-        
-        empleados = []
-        for row in resultados:
-            empleados.append({
-                'id': row[0],
-                'nombre': row[1],
-                'telefono': row[2] if row[2] else '',
-                'cargo': row[3] if row[3] else '',
-                'fecha_contratacion': str(row[4]) if row[4] else '',
-                'id_tienda': row[5]
-            })
-        
-        cursor.close()
-        cerrar_conexion(conexion)
-        return empleados
-        
-    except pyodbc.Error as e:
-        print(f"✗ Error al obtener empleados: {e}")
         cerrar_conexion(conexion)
         return []
 

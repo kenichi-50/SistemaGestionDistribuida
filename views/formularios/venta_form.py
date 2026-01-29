@@ -17,8 +17,8 @@ from database.consultas_quito import (
 )
 from database.consultas_loja import (
     obtener_clientes_loja,
-    obtener_productos_loja,
-    obtener_empleados_loja,
+    obtener_productos_loja_por_tienda,
+    obtener_empleados_loja_por_tienda,
     insertar_venta_loja
 )
 
@@ -118,7 +118,7 @@ class VentaForm(QDialog):
             # Quito: mostrar únicamente empleados de la sucursal activa (usar 1 por ahora)
             empleados = obtener_empleados_quito_por_tienda(1)
         else:
-            empleados = obtener_empleados_loja()
+            empleados = obtener_empleados_loja_por_tienda(3)
         for e in empleados:
             self.combo_empleado.addItem(e['nombre'], e['id'])
 
@@ -126,7 +126,7 @@ class VentaForm(QDialog):
         if self.nodo == 'gestion':
             productos = obtener_productos_quito_por_tienda(1)
         else:
-            productos = obtener_productos_loja()
+            productos = obtener_productos_loja_por_tienda(3)
         self.combo_producto.clear()
         self.productos_dict = {p['id']: p for p in productos}
         for p in productos:
@@ -215,16 +215,15 @@ class VentaForm(QDialog):
         if not self.detalles:
             QMessageBox.warning(self, "Error", "Debe agregar al menos un producto")
             return
-        # Validación final: total por producto no debe exceder stock (Quito)
-        if self.nodo == 'gestion':
-            totales = {}
-            for d in self.detalles:
-                totales[d['id_producto']] = totales.get(d['id_producto'], 0) + d['cantidad']
-            for pid, total in totales.items():
-                stock = self.productos_dict.get(pid, {}).get('stock')
-                if stock is not None and total > stock:
-                    QMessageBox.critical(self, "Stock insuficiente", "La cantidad agregada excede el stock disponible en sucursal.")
-                    return
+        # Validación final: total por producto no debe exceder stock (Quito y Loja)
+        totales = {}
+        for d in self.detalles:
+            totales[d['id_producto']] = totales.get(d['id_producto'], 0) + d['cantidad']
+        for pid, total in totales.items():
+            stock = self.productos_dict.get(pid, {}).get('stock')
+            if stock is not None and total > stock:
+                QMessageBox.critical(self, "Stock insuficiente", "La cantidad agregada excede el stock disponible en sucursal.")
+                return
 
         id_cliente = self.combo_cliente.currentData()
         id_empleado = self.combo_empleado.currentData()
